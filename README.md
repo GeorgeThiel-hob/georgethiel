@@ -15,7 +15,7 @@ Built for privacy, sustainability, and zero ongoing costs.
 
 ## Hardware Requirements
 
-- **GPU:** NVIDIA RTX 3080 12GB (or similar with 12GB+ VRAM)
+- **GPU:** NVIDIA RTX 3080 10GB (or similar with 10GB+ VRAM)
 - **RAM:** 16GB+ system RAM recommended
 - **Storage:** ~15GB free disk space (for model + Docker images)
 - **OS:** Windows 10
