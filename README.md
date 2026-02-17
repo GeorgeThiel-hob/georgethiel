@@ -13,12 +13,33 @@ Built for privacy, sustainability, and zero ongoing costs.
 - Pre-configured with a system prompt for coaching & counseling content creation
 - Fully offline capable — your data never leaves your home
 
-## Hardware Requirements
+## Hardware Specifications
 
-- **GPU:** NVIDIA RTX 3080 10GB (or similar with 10GB+ VRAM)
-- **RAM:** 16GB+ system RAM recommended
-- **Storage:** ~15GB free disk space (for model + Docker images)
-- **OS:** Windows 10
+This server runs on the following hardware:
+
+| Component     | Model                                          |
+|---------------|-------------------------------------------------|
+| **CPU**       | AMD Ryzen 7 3700X (8 cores / 16 threads)       |
+| **GPU**       | NVIDIA GeForce RTX 3080 (10 GB VRAM)           |
+| **RAM**       | 16 GB DDR4 3600 MHz (2× G.Skill 8 GB)         |
+| **Motherboard** | Gigabyte X570 AORUS MASTER                   |
+| **Storage**   | NVMe GIGABYTE GP-ASM2 + Samsung 860 EVO 1 TB SSD + 1 TB HDD |
+| **OS**        | Windows 10                                      |
+
+## Model Compatibility
+
+With 10 GB VRAM and 16 GB system RAM, the following models run well:
+
+| Model | Size on Disk | VRAM Usage | Speed | Best For |
+|-------|-------------|------------|-------|----------|
+| `qwen2.5:7b` | ~4.7 GB | ~5 GB | ⚡ Fast | **Recommended default** — content writing, general chat |
+| `mistral-nemo:12b` | ~7.1 GB | ~8 GB | ⚡ Fast | Creative writing, multilingual |
+| `phi4:14b` (Q4) | ~8.5 GB | ~9 GB | 🔄 Moderate | Reasoning-heavy tasks |
+| `qwen2.5:14b` (Q4) | ~8.7 GB | ~9.5 GB | 🔄 Moderate | Higher quality writing (may use RAM offload) |
+
+**Not recommended** for this hardware: Any model over 14B parameters, even quantized, will exceed available memory and run very slowly or crash.
+
+> **Tip:** Start with `qwen2.5:7b` — it provides excellent writing quality for content creation while leaving plenty of VRAM headroom. Test larger models later if needed.
 
 ---
 
@@ -118,19 +139,19 @@ Both `ollama` and `open-webui` should show as "running".
 
 ### Step 7: Download the AI Model
 
-Pull the Qwen 2.5 14B model (quantized to fit in 12GB VRAM):
+Pull the recommended model (Qwen 2.5 7B — best balance of quality and speed for 10 GB VRAM):
+
+```powershell
+docker exec ollama ollama pull qwen2.5:7b
+```
+
+**Optional:** Test a larger model if you want higher quality writing (may be slightly slower due to RAM offload):
 
 ```powershell
 docker exec ollama ollama pull qwen2.5:14b
 ```
 
-This downloads ~9GB. It only needs to happen once — the model is persisted in a Docker volume.
-
-**Optional:** Also pull the 7B version as a faster alternative:
-
-```powershell
-docker exec ollama ollama pull qwen2.5:7b
-```
+Models only need to be downloaded once — they persist in a Docker volume.
 
 ### Step 8: Access the Web Interface
 
@@ -158,14 +179,14 @@ Look for `IPv4 Address` under your active network adapter (usually something lik
 
 1. The first account you create becomes the **admin** account — create yours first
 2. Then create an account for your girlfriend
-3. Go to **Admin Panel → Settings → Models** and make sure `qwen2.5:14b` appears
+3. Go to **Admin Panel → Settings → Models** and make sure `qwen2.5:7b` appears
 
 ### Step 10: Set Up the Coaching System Prompt
 
 1. Go to **Workspace → Models** in the Open WebUI sidebar
 2. Click **"Create a Model"**
 3. Name it something like "Content Coach"
-4. Under **Base Model**, select `qwen2.5:14b`
+4. Under **Base Model**, select `qwen2.5:7b`
 5. Paste the system prompt from [`prompts/coaching-content-creator.md`](prompts/coaching-content-creator.md)
 6. Save
 
@@ -237,17 +258,19 @@ If you sometimes turn the PC off and want your girlfriend to be able to start it
 Browse available models at [ollama.com/library](https://ollama.com/library) and pull them:
 
 ```powershell
-# Smaller/faster model for quick tasks
-docker exec ollama ollama pull qwen2.5:7b
+# Creative writing, good multilingual support (~8 GB VRAM)
+docker exec ollama ollama pull mistral-nemo:12b
 
-# Strong reasoning model
+# Strong reasoning, compact (~9 GB VRAM)
 docker exec ollama ollama pull phi4:14b
 
-# Good for creative writing
-docker exec ollama ollama pull mistral-nemo:12b
+# Higher quality writing, may use RAM offload (~9.5 GB VRAM)
+docker exec ollama ollama pull qwen2.5:14b
 ```
 
 All pulled models become available in the Open WebUI model dropdown automatically.
+
+> **Important:** With 10 GB VRAM, avoid models larger than 14B parameters. Check a model's size on the Ollama library page before pulling — if the download size exceeds ~9 GB, it likely won't fit.
 
 ---
 
@@ -283,7 +306,7 @@ If generation feels slow, you may be running a model too large for your VRAM. Ch
 nvidia-smi
 ```
 
-If memory usage is near 12GB, switch to the 7B model which runs much faster.
+If memory usage is near 10GB, switch to the 7B model which runs much faster.
 
 ### Access from other devices not working
 
