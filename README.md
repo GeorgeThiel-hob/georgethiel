@@ -370,41 +370,82 @@ docker exec ollama ollama rm <model-name>
 
 ---
 
-## Portable Setup (macOS)
+## Portable Setup (macOS — M1 Max 32 GB)
 
-The Qwen 3.5 9B model also runs well on an Apple Silicon MacBook (M1/M2/M3) with 16 GB+ unified memory. This gives you a portable option when the main PC is off or you're away from home.
+The MacBook Pro 16-inch (2021, M1 Max, 32 GB) can run larger models than the PC thanks to its unified memory. Ollama must run **natively** (not in Docker) for Metal GPU acceleration.
 
-### Install Ollama on macOS
+### Install Ollama
 
 ```bash
 brew install ollama
 ```
 
-### Start and pull the model
+### Start Ollama and pull models
 
 ```bash
 ollama serve
 # In a new terminal:
 ollama pull qwen3.5:9b
+ollama pull qwen3.5:35b-a3b
+ollama pull qwen3.5:27b
 ```
 
-### Chat directly from the terminal
+### Add Open WebUI (browser interface)
+
+Install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) (Apple Silicon), then run:
 
 ```bash
-ollama run qwen3.5:9b
+docker run -d \
+  -p 3000:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -v open-webui:/app/backend/data \
+  --name open-webui \
+  --restart always \
+  ghcr.io/open-webui/open-webui:main
 ```
 
-### Optional: Add Open WebUI
+Open `http://localhost:3000` in your browser. Open WebUI connects to your native Ollama automatically.
 
-If you want the browser interface on the MacBook too, install Docker Desktop for Mac and use the same `docker-compose.yml` from this project (remove the `deploy.resources` GPU section — Apple Silicon uses Metal automatically via Ollama).
+> **Note:** Do NOT use the `docker-compose.yml` from this project for macOS — it includes NVIDIA GPU config that doesn't apply. The `docker run` command above is the correct approach for Mac.
 
-### Performance expectations
+### Recommended models (32 GB unified memory)
 
-| Device | Speed (approx.) | Notes |
-|--------|-----------------|-------|
-| RTX 3080 (PC) | ~40–60 tokens/s | CUDA acceleration |
-| M1 MacBook Pro 16 GB | ~15–25 tokens/s | Metal acceleration, fully usable |
-| M1 MacBook Pro (4B model) | ~30–40 tokens/s | Faster alternative if speed matters |
+| Model | Type | Size (Q4) | Speed (est.) | Best for |
+|-------|------|----------|-------------|----------|
+| **qwen3.5:9b** | Dense | ~5 GB | ~60–80 t/s | Content coach, quick tasks |
+| **qwen3.5:35b-a3b** | MoE | ~22 GB | ~50–80 t/s | Daily driver — fast + smart |
+| **qwen3.5:27b** | Dense | ~17 GB | ~15–20 t/s | Deep reasoning, creative work |
+| qwen3.5:4b | Dense | ~2.5 GB | ~100+ t/s | Ultra-lightweight tasks |
+| gemma3:27b | Dense | ~14 GB | ~10–18 t/s | Creative writing, vision |
+
+> The 35B-A3B is a sparse MoE (only 3B active per token) so it runs at small-model speeds despite having 35B total parameters. All Qwen 3.5 models are natively multimodal (text + images + video), 262K context, Apache 2.0.
+
+### Performance comparison
+
+| Device | Model | Speed (approx.) |
+|--------|-------|-----------------|
+| RTX 3080 (PC) | qwen3.5:9b | ~40–60 t/s |
+| M1 Max (MacBook) | qwen3.5:9b | ~60–80 t/s |
+| M1 Max (MacBook) | qwen3.5:35b-a3b | ~50–80 t/s |
+| M1 Max (MacBook) | qwen3.5:27b | ~15–20 t/s |
+
+### Updating on macOS
+
+```bash
+# Update Ollama
+brew upgrade ollama
+
+# Update Open WebUI
+docker pull ghcr.io/open-webui/open-webui:main
+docker stop open-webui && docker rm open-webui
+docker run -d \
+  -p 3000:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -v open-webui:/app/backend/data \
+  --name open-webui \
+  --restart always \
+  ghcr.io/open-webui/open-webui:main
+```
 
 ---
 
