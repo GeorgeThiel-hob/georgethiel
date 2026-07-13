@@ -13,3 +13,4 @@ desktop.ini
 
 # Environment variables (if added later)
 .env
+__pycache__/
