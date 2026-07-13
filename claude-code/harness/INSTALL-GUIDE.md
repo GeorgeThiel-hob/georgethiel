@@ -45,7 +45,7 @@ Tell the session to read `START-HERE.md` in this kit and begin the install. It w
 
 That's the only part you actively participate in. From there the session computes your
 module set (steps 4–5) and writes `install-spec.json`, then runs **one static command** —
-`python3 handoff-kit/installer.py --spec install-spec.json --dest .` — with no `--now`
+`python3 handoff-kit/installer.py --spec install-spec.json --dest .` (on Windows, if `python3` is a Store alias stub, substitute `python` or `py -3`) — with no `--now`
 flag and no shell command substitution (the installer self-stamps its own UTC
 timestamp) — which mechanically does everything the install used to do by hand: copying
 files, assembling

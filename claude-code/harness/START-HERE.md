@@ -43,6 +43,28 @@ the member** — do not improvise around a gap.
   internally when the destination has no repo yet — its one disclosed subprocess call —
   and computes hashes in pure Python (`hashlib.sha256`), never the `shasum` binary.
   Confirm `python3` and `git` are both available.
+- **Windows notes** (the kit is developed on macOS/Linux; on Windows the
+  following are load-bearing):
+  - **Git for Windows is required for the hook layer.** Claude Code runs hook
+    commands through Git Bash when Git for Windows is installed — without it,
+    hook commands fall back to PowerShell, which cannot run the kit's
+    `bash .claude/hooks/run_python.sh …` commands, and every hook (including
+    the Stop-hook's `CITATION_GUARD_MODE=block …` env-prefix form) stays dead.
+    The skills themselves are plain Markdown and work without any of this.
+  - **Python launch:** where `python3` is a Microsoft Store alias stub, launch
+    the installer with `python` or `py -3` instead (the installed hooks are
+    unaffected — `run_python.sh` already falls back `python3` → `python`).
+  - **Skill shell-outs:** skills that call `python3 .claude/hooks/…` (gate
+    evidence, schema checks) run inside the same Git-Bash environment as the
+    hooks; they inherit the same requirement.
+  - **The github ship skill needs the GitHub CLI** — an authenticated `gh`.
+  - **If you commit `.claude/hooks/` to a repo that Windows machines check
+    out**, add `*.sh text eol=lf` to that repo's `.gitattributes` — a CRLF
+    checkout corrupts `run_python.sh` and every hook dies. (The kit's own tree
+    ships a `.gitattributes` with this rule; your project repo needs its own.)
+  - **Known limitation:** the FULL-tier reexec guard shells out to `grep`,
+    which native Windows lacks — on Windows that guard is fail-open (no
+    enforcement, no crash).
 
 Report anything missing, in one message, before continuing to the install flow.
 

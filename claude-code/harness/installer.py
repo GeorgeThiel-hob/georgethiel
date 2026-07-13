@@ -100,6 +100,15 @@ def _tokens_in_file(path: Path) -> set:
     return set(TOKEN_RE.findall(text))
 
 
+def _variant_rel_key(path, skills_root) -> str:
+    """Spec-comparable key for a skill-variant file: its path relative to
+    dot-claude/skills/, ALWAYS forward-slash. install-spec.json variant
+    entries are POSIX-form ("GIT/SKILL-github.md"); str(Path) renders
+    backslashes on Windows, silently deselecting every chosen variant
+    (FIX-KIT-WINDOWS-COMPAT-01 R2)."""
+    return path.relative_to(skills_root).as_posix()
+
+
 def _discover_payload_files(modules_root: Path, module: str, spec: dict) -> list:
     """Return the source files module's files/ payload contributes, after
     resolving skill-variant and Q3-conditional exclusions (spec §4 step 1,
@@ -126,8 +135,7 @@ def _discover_payload_files(modules_root: Path, module: str, spec: dict) -> list
             # (e.g. "REVIEW/SKILL-full.md" — spec §4 step 1b / design-doc
             # schema), not to files_root — compare against that root.
             skills_root = files_root / "dot-claude" / "skills"
-            rel_to_skills = path.relative_to(skills_root)
-            if str(rel_to_skills) not in variant_choices:
+            if _variant_rel_key(path, skills_root) not in variant_choices:
                 continue  # unchosen sibling — never copied (spec §4 step 1b)
             result.append(path)
             continue
@@ -478,6 +486,23 @@ def load_and_validate_spec(spec_path: str, kit_root: Path) -> dict:
                 f"unknown module in spec: {module!r} "
                 f"(no directory at {modules_root / module})"
             )
+
+    # FIX-KIT-WINDOWS-COMPAT-01 (R6): dependency closure — any selected module
+    # that wires hook commands through .claude/hooks/run_python.sh needs
+    # 10-hooks-base (the only module shipping the launcher). Without it the
+    # merged settings.json references a file that is never copied, and every
+    # hook dies with "run_python.sh: No such file or directory" at first use.
+    if "10-hooks-base" not in modules:
+        for module in modules:
+            fragment = modules_root / module / "settings-fragment.json"
+            if fragment.is_file() and "run_python.sh" in fragment.read_text(
+                encoding="utf-8"
+            ):
+                raise InstallError(
+                    f"module {module!r} registers hooks via "
+                    ".claude/hooks/run_python.sh, which only 10-hooks-base "
+                    "installs — add 10-hooks-base to the spec's modules"
+                )
 
     for module, paths in spec.get("variants", {}).items():
         for rel in paths:
