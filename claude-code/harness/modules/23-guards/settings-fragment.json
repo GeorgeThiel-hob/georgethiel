@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/run_python.sh .claude/hooks/subagentstop_log.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CITATION_GUARD_MODE=block bash .claude/hooks/run_python.sh .claude/hooks/stop_citation_guard.py"
+          }
+        ]
+      }
+    ]
+  }
+}

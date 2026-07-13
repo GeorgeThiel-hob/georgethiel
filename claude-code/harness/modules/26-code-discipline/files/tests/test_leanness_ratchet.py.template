@@ -1,0 +1,468 @@
+"""Leanness ratchet — blocks NEW C901/SIM/PLR-slice violations in src/.
+
+Grandfathers the existing baseline so only newly-introduced violations fail the suite.
+The ratchet runs ruff's OWN invocation (these rules are deliberately NOT in the
+project's own lint `select`, so the normal lint gate never sees them and no src/ file
+is modified by this check) and reduces each violation to a per-identity Counter keyed
+on (relative_file, code, qualified_symbol).
+It asserts one-directional: current - baseline == ∅ (no new key, no raised count).
+
+Kit note: generalized from a project-specific origin file — see this module's
+`README.md` and `docs/harness/26-code-discipline.md` for the design rationale in kit
+form; the scan root defaults to `src/` (retarget per the README's ADAPT note if your
+shared code lives elsewhere).
+Regenerate the baseline: python3 tests/test_leanness_ratchet.py
+"""
+
+from __future__ import annotations
+
+import ast
+import json
+import os
+import shutil
+import subprocess
+import warnings
+from collections import Counter
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parent.parent  # tests/ -> repo root
+SELECT = (
+    "C901",
+    "SIM",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR5501",
+    "PLR1730",
+)
+MAX_COMPLEXITY = 15
+
+
+def _resolve_ruff() -> tuple[Path | None, list[str]]:
+    """Resolve the ruff binary via a fallback chain instead of one pinned POSIX path.
+
+    A single hardcoded `.venv/bin/ruff` breaks on Windows (`.venv\\Scripts\\ruff.exe`)
+    and on any layout that isn't a `.venv`-based install (uv/poetry/conda/system
+    Python). Tried, in order:
+    1. `$RUFF_BIN` env override — point the ratchet at a custom location without
+       editing this file.
+    2. `<repo>/.venv/bin/ruff` — POSIX venv layout.
+    3. `<repo>/.venv/Scripts/ruff.exe` — Windows venv layout.
+    4. `shutil.which("ruff")` — anything resolvable on PATH.
+
+    Returns `(resolved_path_or_None, candidates_tried)`. Nothing here raises: an
+    all-candidates-absent result is still returned (as `None`) so the caller can
+    fail LOUD with a RuntimeError naming every candidate — never silently skip the
+    ratchet (see `_require_ruff`).
+    """
+    tried: list[str] = []
+    env_override = os.environ.get("RUFF_BIN")
+    if env_override:
+        tried.append(f"$RUFF_BIN={env_override}")
+        if Path(env_override).is_file():
+            return Path(env_override), tried
+    for candidate in (
+        REPO / ".venv" / "bin" / "ruff",
+        REPO / ".venv" / "Scripts" / "ruff.exe",
+    ):
+        tried.append(str(candidate))
+        if candidate.is_file():
+            return candidate, tried
+    tried.append('shutil.which("ruff")')
+    which = shutil.which("ruff")
+    if which:
+        return Path(which), tried
+    return None, tried
+
+
+_RUFF, _RUFF_CANDIDATES = _resolve_ruff()
+_BASELINE = Path(__file__).resolve().parent / "leanness_baseline.json"
+
+
+def _require_ruff() -> Path:
+    """Return the resolved ruff binary, or raise RuntimeError naming every
+    candidate `_resolve_ruff()` tried.
+
+    Fail loud, never silently skip: a green suite must never mean "the ratchet
+    couldn't find ruff so it quietly did nothing."
+    """
+    if _RUFF is None:
+        raise RuntimeError(
+            "no ruff binary found — the leanness ratchet tried: "
+            + ", ".join(_RUFF_CANDIDATES)
+            + ". Install ruff in the repo .venv, make it resolvable on PATH, or set "
+            "RUFF_BIN to an explicit path (see tests/README.md)."
+        )
+    return _RUFF
+
+
+def _scopes(source: str) -> list[tuple[int, int, str]]:
+    """Return (start_line, end_line, dotted_qualname) for every Func/AsyncFunc/Class
+    scope.
+    """
+    tree = ast.parse(source)
+    scopes: list[tuple[int, int, str]] = []
+
+    def walk(node: ast.AST, prefix: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                qual = f"{prefix}.{child.name}" if prefix else child.name
+                scopes.append(
+                    (child.lineno, getattr(child, "end_lineno", child.lineno), qual)
+                )
+                walk(child, qual)
+            else:
+                walk(child, prefix)
+
+    walk(tree, "")
+    return scopes
+
+
+def _qualified_symbol(source: str, lineno: int) -> str:
+    """Innermost enclosing scope's dotted path for a 1-indexed line.
+
+    Returns '<module>' if the line is at module scope.
+    """
+    best, best_span = "<module>", None
+    for start, end, qual in _scopes(source):
+        if start <= lineno <= end:
+            span = end - start
+            if best_span is None or span < best_span:  # innermost = smallest span
+                best_span, best = span, qual
+    return best
+
+
+def violation_identities(
+    select: tuple[str, ...] | list[str],
+    paths: list[str],
+    max_complexity: int,
+    root: Path,
+) -> Counter[tuple[str, str, str]]:
+    """Run ruff --isolated over `paths`, tally each violation under (file, code, sym).
+
+    The ruff binary is resolved by `_resolve_ruff()` (env override, POSIX venv,
+    Windows venv, then PATH — see its docstring), NOT derived from `root`; `root`
+    governs only relativization and subprocess cwd. Fails loudly (raises RuntimeError)
+    on an unresolvable or broken ruff so a green suite can never mean "ratchet
+    silently disabled": no candidate resolved, exit ∉{0,1}, or empty/non-JSON stdout.
+    """
+    ruff_bin = _require_ruff()
+    try:
+        proc = subprocess.run(
+            [
+                str(ruff_bin),
+                "check",
+                "--isolated",
+                "--output-format",
+                "json",
+                "--select",
+                ",".join(select),
+                "--config",
+                f"lint.mccabe.max-complexity={max_complexity}",
+                *paths,
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(root),
+        )
+    except (
+        FileNotFoundError
+    ) as exc:  # resolved ruff binary vanished between resolution and use — fail loud
+        raise RuntimeError(
+            f"ruff binary not found at {ruff_bin} (resolved via candidates: "
+            + ", ".join(_RUFF_CANDIDATES)
+            + ") — the leanness ratchet requires ruff; run "
+            "`pip install -r requirements.txt` in .venv, or set RUFF_BIN"
+        ) from exc
+    if proc.returncode not in (0, 1):
+        raise RuntimeError(
+            f"ruff exited {proc.returncode} (expected 0 or 1) — leanness ratchet "
+            f"cannot run.\nstderr:\n{proc.stderr}"
+        )
+    if not proc.stdout.strip():
+        raise RuntimeError(
+            "ruff produced empty stdout — leanness ratchet cannot build the identity"
+            " set"
+        )
+    try:
+        items = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"ruff stdout is not valid JSON — leanness ratchet cannot parse it: {exc}"
+        ) from exc
+
+    counter: Counter[tuple[str, str, str]] = Counter()
+    src_cache: dict[str, str] = {}
+    root_resolved = Path(root).resolve()
+    for item in items:
+        code = item.get("code")
+        if code is None:  # ruff internal / E999 item — never key as (file, None, sym)
+            continue
+        fn = item["filename"]
+        rel = str((Path(root) / fn).resolve().relative_to(root_resolved))
+        if fn not in src_cache:
+            src_cache[fn] = Path(fn).read_text(encoding="utf-8")
+        row = item["location"]["row"]
+        qual = _qualified_symbol(src_cache[fn], row)
+        counter[(rel, code, qual)] += 1
+    return counter
+
+
+def _complex_function_source(name: str = "deeply_branchy") -> str:
+    """A function whose complexity (~21) exceeds MAX_COMPLEXITY=15 (20 seq. ifs)."""
+    branches = "".join(f"    if x == {i}:\n        return {i}\n" for i in range(20))
+    return f"def {name}(x):\n{branches}    return -1\n"
+
+
+def test_negative_control_qualified_symbol_names_the_function(tmp_path):
+    # AC-5(a): a >15-complexity function yields a C901 identity whose qualified_symbol
+    # is THAT function (not <module>). tmp_path on macOS lives under /var ->
+    # /private/var; passing it as `root` exercises the resolve-both-sides
+    # relativization, which must NOT ValueError (F3-R2).
+    src = tmp_path / "sample.py"
+    src.write_text(_complex_function_source(), encoding="utf-8")
+    ids = violation_identities(SELECT, [str(src)], MAX_COMPLEXITY, root=tmp_path)
+    c901 = [(f, c, s) for (f, c, s) in ids if c == "C901"]
+    assert (
+        c901
+    ), f"expected a C901 identity from a complexity-21 function, got {dict(ids)}"
+    assert any(
+        s == "deeply_branchy" for (_, _, s) in c901
+    ), f"C901 qualified_symbol should name the function, got {c901}"
+
+
+def test_negative_control_raises_on_nonzero_ruff_exit(monkeypatch):
+    # AC-5(c): exit ∉{0,1} -> RuntimeError (NOT a silent empty Counter that would pass).
+    # stdout is valid, non-empty JSON ("[]") ON PURPOSE so neither the empty-stdout
+    # guard nor json.loads backstops this — only the exit-code guard can raise, and
+    # `match=` pins its message. Delete the exit-code guard and this test FAILS
+    # (json.loads("[]") -> [] -> empty Counter -> no raise), as a guard-test must.
+    class _Fake:
+        returncode = 2
+        stdout = "[]"
+        stderr = "boom"
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Fake())
+    with pytest.raises(RuntimeError, match="expected 0 or 1"):
+        violation_identities(SELECT, ["src/"], MAX_COMPLEXITY, root=REPO)
+
+
+def test_negative_control_raises_on_empty_stdout(monkeypatch):
+    # AC-5(c): exit 0 but empty stdout -> RuntimeError. `match=` pins the empty-stdout
+    # guard's message so this isolates it: delete that guard and json.loads("   ")
+    # raises a different-messaged RuntimeError, failing the match — non-vacuous.
+    class _Fake:
+        returncode = 0
+        stdout = "   "
+        stderr = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Fake())
+    with pytest.raises(RuntimeError, match="empty stdout"):
+        violation_identities(SELECT, ["src/"], MAX_COMPLEXITY, root=REPO)
+
+
+def test_negative_control_raises_on_non_json_stdout(monkeypatch):
+    # AC-5(c): exit 1 but non-JSON stdout -> RuntimeError. `match=` pins the JSON
+    # guard's message: delete that guard and the raw JSONDecodeError propagates
+    # uncaught (not a RuntimeError), failing pytest.raises — non-vacuous.
+    class _Fake:
+        returncode = 1
+        stdout = "not json at all"
+        stderr = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Fake())
+    with pytest.raises(RuntimeError, match="not valid JSON"):
+        violation_identities(SELECT, ["src/"], MAX_COMPLEXITY, root=REPO)
+
+
+def test_negative_control_raises_on_missing_ruff_binary(monkeypatch):
+    # AC-5(c) class: a missing pinned ruff binary must raise a legible RuntimeError
+    # (never let a raw FileNotFoundError propagate and error the whole suite opaquely).
+    def _boom(*a, **k):
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(subprocess, "run", _boom)
+    with pytest.raises(RuntimeError, match="ruff binary not found"):
+        violation_identities(SELECT, ["src/"], MAX_COMPLEXITY, root=REPO)
+
+
+def _load_baseline() -> Counter[tuple[str, str, str]]:
+    """Reconstruct the grandfathered identity Counter from tests/leanness_baseline.json.
+
+    (file, code, qualified_symbol) -> count, read back from JSON on disk.
+    """
+    rows = json.loads(_BASELINE.read_text(encoding="utf-8"))
+    return Counter({(f, c, s): n for f, c, s, n in rows})
+
+
+def _dump_baseline(counter: Counter[tuple[str, str, str]]) -> str:
+    """Serialize a Counter to a sorted JSON list of [file, code, symbol, count] rows."""
+    # sort by the (file, code, symbol) key only — never order the heterogeneous
+    # [str,str,str,int] row (mypy rejects ordering list[str | int]); the key is
+    # deterministic and total.
+    rows = sorted(
+        ([f, c, s, n] for (f, c, s), n in counter.items()),
+        key=lambda r: (r[0], r[1], r[2]),
+    )
+    return json.dumps(rows, indent=2) + "\n"
+
+
+def _write_baseline() -> None:
+    """Regenerate tests/leanness_baseline.json from current src/.
+
+    Run: python3 tests/test_leanness_ratchet.py
+    """
+    counter = violation_identities(SELECT, ["src/"], MAX_COMPLEXITY, root=REPO)
+    _BASELINE.write_text(_dump_baseline(counter), encoding="utf-8")
+
+
+def _pinned_ruff_version() -> str:
+    """The ruff version pinned in requirements.txt (single source — never hardcode
+    it here).
+    """
+    for line in (REPO / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("ruff=="):
+            return stripped.split("==", 1)[1].split()[0].strip()
+    raise RuntimeError("no `ruff==<version>` pin found in requirements.txt")
+
+
+def _tighten_nudge(
+    baseline: Counter[tuple[str, str, str]],
+    current: Counter[tuple[str, str, str]],
+) -> None:
+    """Non-blocking: warn (never fail) when the baseline lists identities no longer
+    present.
+
+    `baseline - current` = fixed-but-still-grandfathered entries. Surfaced via
+    warnings.warn so it appears in pytest's warnings summary; a bare print() would
+    be captured on a passing test and seen by no one (NF-1). This is a nudge to
+    tighten the baseline, never a gate.
+    """
+    stale = baseline - current
+    if stale:
+        warnings.warn(
+            "leanness baseline has "
+            f"{len(stale)} stale (fixed but still grandfathered) "
+            f"entr{'y' if len(stale) == 1 else 'ies'} — "
+            "regenerate tests/leanness_baseline.json to tighten the ratchet: "
+            + ", ".join(f"{f}:{c}:{s}" for (f, c, s), _ in sorted(stale.items())),
+            UserWarning,
+            stacklevel=2,
+        )
+
+
+@pytest.mark.filterwarnings("default::UserWarning")
+def test_leanness_ratchet_no_new_violations():
+    # AC-2: one-directional — current - baseline must be empty. A new
+    # (file,code,symbol) key OR a raised count within an existing key is a positive
+    # excess and fails; a fix-only PR (a key drops to 0 and leaves the positive
+    # subtraction) passes with no baseline edit.
+    current = violation_identities(SELECT, ["src/"], MAX_COMPLEXITY, root=REPO)
+    baseline = _load_baseline()
+    new = current - baseline
+    assert new == Counter(), (
+        "NEW leanness violations not in the grandfathered baseline "
+        "(simplify the code, or — if intentional — regenerate "
+        "tests/leanness_baseline.json; REVIEW Step-2b(iii)(b) flags baseline GROWTH "
+        "as P1 requiring justification):\n"
+        + "\n".join(f"  {f}:{c}:{s} (+{n})" for (f, c, s), n in sorted(new.items()))
+    )
+    _tighten_nudge(baseline, current)  # non-blocking: warns on stale baseline entries
+
+
+def test_ratchet_fails_on_new_key():
+    # AC-5(b): a brand-new (file, code, symbol) key is a positive excess -> fails.
+    baseline = Counter({("src/a.py", "SIM108", "f"): 1})
+    current = baseline + Counter({("src/b.py", "C901", "g"): 1})
+    assert (current - baseline) != Counter()
+    assert (current - baseline) == Counter({("src/b.py", "C901", "g"): 1})
+
+
+def test_ratchet_fails_on_compensating_change_including_same_name_swap():
+    # AC-11: remove a grandfathered identity (ClassA.foo) and add a new one that
+    # shares the BARE name (ClassB.foo). A bare-name Counter keyed on
+    # ("src/f.py","C901","foo") would net to zero and MASK the change; the
+    # qualified key ClassB.foo is new, so one-directional catches it.
+    baseline = Counter({("src/f.py", "C901", "ClassA.foo"): 1})
+    current = Counter({("src/f.py", "C901", "ClassB.foo"): 1})
+    new = current - baseline
+    assert (
+        new != Counter()
+    ), "qualified keying must catch a same-name swap a bare count would mask"
+    assert new == Counter({("src/f.py", "C901", "ClassB.foo"): 1})
+    # demonstrate the bare-name scheme WOULD have masked it (the hole this closes):
+    bare_baseline = Counter({("src/f.py", "C901", "foo"): 1})
+    bare_current = Counter({("src/f.py", "C901", "foo"): 1})
+    assert (
+        bare_current - bare_baseline
+    ) == Counter(), "bare names collide -> the masked hole"
+
+
+def test_ratchet_fails_on_within_symbol_multiplicity():
+    # AC-12: a 2nd SIM added to a function grandfathered with 1 raises the count
+    # above baseline. A bare set[(file,code,symbol)] would treat {..W.stop} as
+    # already-present and MISS it; the Counter's positive subtraction yields +1.
+    # (Illustrative case: a class's .stop() method carrying 3x SIM105.)
+    baseline = Counter(
+        {("src/c.py", "SIM105", "ClassC.stop"): 1}
+    )
+    current = Counter(
+        {("src/c.py", "SIM105", "ClassC.stop"): 2}
+    )
+    new = current - baseline
+    assert new == Counter(
+        {("src/c.py", "SIM105", "ClassC.stop"): 1}
+    )
+    assert new != Counter()
+    # a bare SET would compare {key} vs {key} and see no new element -> the masked
+    # hole:
+    assert (
+        set(current) - set(baseline)
+    ) == set(), "bare set misses multiplicity -> the masked hole"
+
+
+def test_ruff_version_matches_pin():
+    # AC-6: the baseline is version-fragile; a ruff bump must FAIL (not skip) so the
+    # ratchet is never silently disabled. The expected version is parsed from
+    # requirements.txt, not hardcoded.
+    pinned = _pinned_ruff_version()
+    ruff_bin = _require_ruff()
+    proc = subprocess.run([str(ruff_bin), "--version"], capture_output=True, text=True)
+    running = proc.stdout.strip().split()[-1]  # "ruff 0.15.5" -> "0.15.5"
+    assert running == pinned, (
+        f"ruff {running} != pinned {pinned}; leanness baseline accounting is "
+        f"version-fragile — regenerate the baseline for ruff {pinned} "
+        "(python3 tests/test_leanness_ratchet.py)"
+    )
+
+
+def test_tighten_nudge_warns_on_stale_baseline_and_is_non_blocking():
+    # AC-13: when baseline - current != ∅ (a fixed entry still listed), _tighten_nudge
+    # emits a UserWarning naming the stale entries AND does not raise (non-blocking).
+    # Locks the secondary backstop so it can't silently degrade to a captured print.
+    baseline = Counter(
+        {("src/x.py", "C901", "gone"): 1, ("src/y.py", "SIM105", "kept"): 1}
+    )
+    current = Counter({("src/y.py", "SIM105", "kept"): 1})  # "gone" was fixed
+    with pytest.warns(UserWarning, match="stale"):
+        _tighten_nudge(baseline, current)  # returns normally -> non-blocking
+
+
+def test_tighten_nudge_silent_when_baseline_clean():
+    # AC-13 (complement): no stale entries -> no warning (the build-time green path).
+    import warnings as _w
+
+    counter = Counter({("src/y.py", "SIM105", "kept"): 1})
+    with _w.catch_warnings():
+        _w.simplefilter("error")  # any warning would raise
+        _tighten_nudge(counter, counter)  # baseline == current -> silent
+
+
+if __name__ == "__main__":
+    _write_baseline()
+    _rows = json.loads(_BASELINE.read_text(encoding="utf-8"))
+    print(f"wrote {_BASELINE} ({len(_rows)} rows)")
