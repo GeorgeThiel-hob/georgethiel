@@ -1,6 +1,6 @@
 ---
 name: GIT
-description: Use when work is complete and ready to ship — merges the current branch into local main and cleans up. Invoke after all tests pass and audit is clean.
+description: Use when work is complete and ready to ship — merges the current branch into the local trunk branch and cleans up. Invoke after all tests pass and audit is clean.
 ---
 
 > **Kit variant: local ship target — an ADAPTATION, not a pure scrub.** Installed
@@ -21,7 +21,7 @@ description: Use when work is complete and ready to ship — merges the current 
 
 ## Overview
 
-Ship completed work: merge the branch into local main (squash, to keep history readable) and clean up the feature branch. This is the single command for "I'm done, ship it" on a project with no GitHub remote in the loop.
+Ship completed work: merge the branch into the local trunk branch (squash, to keep history readable) and clean up the feature branch. This is the single command for "I'm done, ship it" on a project with no GitHub remote in the loop.
 
 ## When to Use
 
@@ -34,7 +34,7 @@ Ship completed work: merge the branch into local main (squash, to keep history r
 
 Before doing anything, verify:
 
-1. **Correct branch:** `git branch --show-current` — must be a `feature/*` branch, never `main`
+1. **Correct branch:** `git branch --show-current` — must be a `feature/*` branch, never `<trunk>` (resolved by section 1's trunk recipe)
 2. **Clean state:** `git status` — no uncommitted changes (commit or stash first)
 3. **Tests pass:** `{{TEST_CMD}}` — zero failures
 4-6. **Lint / format / type (changed-file scoped):** run `{{LINT_CMD}}` and `{{TYPE_CMD}}` over this project's full source tree, then scope the pass/fail decision to files this branch changed.
@@ -95,15 +95,24 @@ digraph gt_local_flow {
 
 ### 1. Merge Locally (squash)
 
-No remote interaction — this assumes local `main` is already this project's source of truth (no `git fetch`/`git pull` step, unlike a remote-tracked workflow).
+No remote interaction — this assumes the local trunk branch is already this
+project's source of truth (no `git fetch`/`git pull` step, unlike a
+remote-tracked workflow).
+
+Resolve the trunk branch first — a remote-less repo has no `origin/HEAD` to
+consult, so check what exists (no pipes needed; run each until one succeeds):
+
+- `git show-ref --verify --quiet refs/heads/main` → trunk is `main`
+- else `git show-ref --verify --quiet refs/heads/master` → trunk is `master`
+- else use the name from `git config init.defaultBranch` (defaults to `main`)
 
 ```bash
-git checkout main
+git checkout <trunk>
 git merge --squash <feature-branch>
 git commit -m "<title> [TICKET-ID]"
 ```
 
-`--squash` stages the feature branch's changes without creating a merge commit or carrying its commit history — `git commit` then makes one clean commit on `main`, matching the github variant's squash-merge outcome without a PR.
+`--squash` stages the feature branch's changes without creating a merge commit or carrying its commit history — `git commit` then makes one clean commit on the trunk, matching the github variant's squash-merge outcome without a PR.
 
 ### 2. Delete the Feature Branch
 
@@ -118,14 +127,14 @@ Output:
 ## Shipped (local)
 
 - **Branch:** feature/<name> — merged locally, no remote interaction
-- **Merged:** squash into main (local commit, no PR)
-- **Local:** on main, feature branch deleted
+- **Merged:** squash into the trunk branch (local commit, no PR)
+- **Local:** on the trunk branch, feature branch deleted
 ```
 
 ## Rules
 
 1. **Never merge without passing pre-flight.** Tests and lint must be clean.
-2. **Always squash merge.** Keeps main history readable, same as the github variant.
+2. **Always squash merge.** Keeps trunk history readable, same as the github variant.
 3. **No branch-publishing command, no PR, no remote command of any kind.** This variant exists precisely because this project has no GitHub remote in its ship path — reintroducing a remote call here defeats the point; if this project later adds a GitHub remote, switch to the github variant instead of patching remote calls into this one.
 4. **Always delete the local feature branch after merge.** Keeps the repo clean.
 5. **If the squash-merge conflicts,** report the conflict and stop — don't auto-resolve.
