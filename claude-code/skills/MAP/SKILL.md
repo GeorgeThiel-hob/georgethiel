@@ -1,6 +1,6 @@
 ---
 name: MAP
-description: Use to map the COMPLETE chain of effects of any load-bearing finding or assumption about how the system behaves, before it ships or is built on. Starts at the finding (the closest vicinity), then each iteration adversarially re-examines the prior iteration's understanding and expands one ring outward along causal/data-flow edges, until a full round adds nothing new and every node is resolved. Auto-triggered (do not wait for owner prompt) by any audit before shipping, any FIX/ticket scope before it is written, any "verify/confirm/map/deep dive/check/analyse" instruction from the owner, the synthesis step of systematic-debugging, and any finding/assumption you are about to act on, build on, or present as fact. Invocable as /Map; /VERIFY is a retained alias (same skill).
+description: Use to map the COMPLETE chain of effects of any load-bearing finding or assumption about how the system behaves, before it ships or is built on. Starts at the finding (the closest vicinity): Round 1 adversarially examines it against the complete surface the change touches, then Round 2 (fresh-eyes) adversarially re-examines Round 1's map — a fixed two-round budget, plus at most one reopen round if a P0/P1 surfaces late. Auto-triggered (do not wait for owner prompt) by any audit before shipping, any FIX/ticket scope before it is written, any "verify/confirm/map/deep dive/check/analyse" instruction from the owner, the synthesis step of systematic-debugging, and any finding/assumption you are about to act on, build on, or present as fact. Invocable as /Map; /VERIFY is a retained alias (same skill).
 ---
 
 # MAP — Effect-Chain Mapping Loop (adversarial, guarded convergence)
@@ -22,21 +22,44 @@ complete, correct map of how the effect propagates through the system and the
 code, finding ALL connected surprises (rotten links to fix/cut, and load-bearing
 dependencies to confirm) — not a yes/no on whether one finding is true.**
 
-Branching is the product, not scope-creep. A round that surfaces new genuinely
-connected effects is the loop *working*. The loop ends when the map stops growing
-and every node is resolved — never on a round count.
+Within the fixed round budget (see Convergence, below), branching is still the
+product, not scope-creep: a round that surfaces a new, genuinely connected
+effect is the loop working, not the loop running long. The budget — not the
+map's size — decides when the loop ends.
 
 This skill is the mechanism behind this project's "always run a verification
 loop before relying on a load-bearing finding" convention (module `00-core`,
 if this install's CLAUDE.md documents it that way). Its convergence criterion is
 authoritative.
 
-## Core principle
+## Convergence — budgeted
 
-> Terminate when, and only when, a FULL round adds ZERO new nodes to the effect
-> map AND every node is resolved (`Verified-correct` or `rotten` with a fix/cut
-> decision). Nothing else terminates it — not your judgment, not a verifier's
-> verdict, not a round count, not "this is obviously right."
+The loop runs a FIXED budget: Step 0 (seed + intended behavior) → Round 1
+(adversarial; the dispatch hands the verifier the COMPLETE surface list —
+every file, interface, and guard the change touches — so completeness is
+enumerated once, not discovered one node per round) → Round 2 (terminal
+fresh-eyes: a fresh-context verifier reopens the load-bearing citations and
+Round 1's amendments).
+
+**Finding disposition:**
+- P2 / cosmetic / style / doc-polish: fix inline, record in the dossier, do
+  NOT reopen the loop. Open P2 notes never block convergence.
+- P0/P1 (wrong behavior, failing gate, false load-bearing claim): fix, then
+  ONE reopen round verifies the fix. A P0/P1 surfacing AFTER the reopen round
+  → STOP and escalate to the human with the map-so-far. Never run a fourth
+  verification round on your own judgment. (Oscillation — the same node
+  re-litigated with no new evidence — is grounds to escalate EARLY, before
+  the budget is spent.)
+
+**Terminal state:** `Status: CONVERGED` when the budget completes with all
+P0/P1 resolved (open P2 notes listed, not blockers). If escalated:
+`Status: OPEN — escalated <reason>` — the ship gate stays closed until the
+human decides.
+
+**The trade** (deliberate, owner-set): the old unbounded zero-new-nodes law
+bought late cosmetic catches at 1-2 verifier dispatches each. Those now flow
+to the review/AUDIT loop instead — which remains mandatory and is this
+budget's safety net.
 
 ## When to use
 
@@ -49,50 +72,58 @@ Auto-trigger (do NOT wait for an owner prompt):
   or write into a ticket/report/dossier** — that itself fires the loop; map it
   before you rely on it (this is the broadest trigger and the most often skipped)
 
-If a finding is load-bearing and this loop has not reached a clean round, it is
+If a finding is load-bearing and this loop's budget has not yet completed
+(Round 2 terminal, or the reopen round if one was spent), it is
 **unverified — say so**; do not present it as fact.
 
-## The rolling-perspective loop (iteration n re-examines n−1)
+## The two-round loop (Round 2 re-examines Round 1)
 
-The loop is a sequence of iterations over an evolving understanding:
+The loop is exactly two rounds, plus at most one reopen:
 
-- **Iteration n takes as input the map + assumptions formed at the end of n−1**
-  (iteration 1's input is Step 0's seed map). It does NOT re-derive from scratch.
-- **Iteration n adversarially attacks that input** — it tries to REFUTE each
-  not-yet-`Verified-correct` node and to expand the frontier one ring outward
-  (see Expansion discipline). REFUTATION is the method; MAPPING is the goal.
-- **End of iteration n — exactly two outcomes:**
-  1. **Nothing new** — no node added, no node refuted/relabeled, no contradiction,
-     no unresolved node left. The map from n−1 is proven. → **converge** (go to
-     post-loop second-opinion synthesis, then finalize).
-  2. **Something new** — a node was added, OR a prior assumption was refuted/
-     narrowed/inverted, OR a contradiction surfaced. → **update the map and the
-     assumptions**, and feed that updated understanding into iteration n+1. The
-     loop re-runs against the new perspective.
+- **Round 1 takes Step 0's seed map and the complete surface list as input.**
+  It does NOT re-derive from scratch — Step 0 already established intended
+  behavior and the first-pass map.
+- **Round 1 adversarially attacks that input** — it tries to REFUTE every node
+  and enumerate the complete surface handed to it (see Coverage discipline,
+  below). REFUTATION is the method; MAPPING is the goal.
+- **Round 2 (fresh-eyes) takes Round 1's updated map as input** and
+  independently reopens the load-bearing citations and Round 1's amendments —
+  a genuinely fresh context, not a continuation of Round 1's own reasoning.
+- **End of Round 2 — exactly two outcomes:**
+  1. **Nothing outstanding** — no unresolved P0/P1, no unfolded finding. →
+     converge (go to post-loop second-opinion synthesis, then finalize).
+  2. **A P0/P1 surfaced** — fix it, then spend the single reopen round
+     verifying the fix. If the reopen has already been spent, escalate
+     instead of running a further round.
 
-So each iteration's perspective is wider than the last: it inherits everything
-n−1 confirmed and pushes into what n−1 did not yet see. By design this continues
-indefinitely; the ONLY stop is a fully-clean round (outcome 1). The guards below
-(oscillation escape, on-chain scope test) exist so that "indefinitely" terminates
-rather than diverges — they never stop a productively-growing map early.
+Each round's perspective is wider than the last: Round 2 inherits everything
+Round 1 confirmed and independently re-examines what Round 1 might have
+missed. By design the budget is fixed at two rounds plus one reopen — see
+Convergence — budgeted, above, for the exact terminal conditions.
 
-## Expansion discipline — vicinity → global, along confirmed edges (efficiency)
+## Coverage discipline — complete surface, up front (efficiency)
 
-Do NOT global-fan-out on round 1. Map breadth-first **one ring outward from
-resolved nodes**:
+Round 1 receives the COMPLETE surface list at dispatch time — every file,
+interface, and guard the change touches — so the full breadth of the change
+is enumerated once, in Round 1, rather than discovered piecemeal across
+rounds:
 
-- Round 1 covers the finding's immediate neighborhood (the functions/state/rows it
-  directly touches). Each later round expands only to the *neighbors of nodes that
-  are now resolved* — the next ring of callers, consumers, writers, and dependencies.
-- A node enters the map ONLY via a **causal or data-flow edge** to an existing
-  node ("X is rotten/true *because of* Y", "Y feeds X", "X reads/writes the state Y
-  produces"). This keeps expansion on the actual effect-chain and is why the loop
-  terminates instead of wandering into unrelated subsystems.
-- This is cheaper than a global search (early rounds are small and focused) and
-  more complete (you cannot skip a node by jumping too far past it).
+- The Step 0 seed map (functions/state/rows the finding directly touches) is
+  the starting surface; the orchestrator adds any file/interface/guard the
+  change touches that Step 0 didn't already capture, before dispatching
+  Round 1.
+- A node enters the map ONLY via a **causal or data-flow edge** to an
+  existing node ("X is rotten/true *because of* Y", "Y feeds X", "X reads/
+  writes the state Y produces"). This keeps the map on the actual
+  effect-chain instead of wandering into unrelated subsystems, even though
+  the whole surface is handed over up front.
+- Round 2 does not re-enumerate the surface; it re-examines Round 1's
+  conclusions with fresh eyes. This is cheaper than repeated re-discovery
+  (the full breadth is named once) and more complete (nothing is skipped by
+  surfacing too late for the budget to cover it).
 
-A node with NO causal/data-flow edge to the map is out of scope — note it as a
-separate investigation; do not silently drop it and do not chase it here.
+A node with NO causal/data-flow edge to the map is out of scope — note it as
+a separate investigation; do not silently drop it and do not chase it here.
 
 ## Step 0 — Scope & intended-behavior overview (before any adversarial round)
 
@@ -135,153 +166,155 @@ ROOT: <the finding/assumption stated as a claim>
 - Edges are causal/dependency/data-flow ("X because of Y", "Y feeds X").
 - Node states: `Verified-correct` (proven, positive evidence), `rotten:fix`
   (defect, fix it), `rotten:cut` (defect, remove/replace), `unresolved` (not yet
-  proven either way — keeps the loop open).
+  proven either way — remains open for the next round, or the reopen, to resolve).
 - A finding that is connected but in a *sibling* subsystem is still a node — add
   it, label it, decide fix/cut/defer. It is a branch, not scope-creep.
 - **The `ev:` slot MUST be a primary source (circularity-rejection convention).** A `Verified-correct` node's `ev:` is a `file:line`, a query, a primary doc, or a raw data / independent-subagent-return artifact — NEVER a prior `map-dossier.md` (that is a prior *verification conclusion*, not a primary source; citing it is circular — the loop grading its own homework). Put dossier lineage / "see also" / predecessor references in a `[[link]]`, a `**Prior art:**` / `**MAP-dossier:**` header field, or prose — never the `ev:` slot. If this install's guards module (`23-guards`) is present, a MAP-dossier write whose structured `[Verified-correct` node's `ev:` cites the canonical `map-dossier.md` filename is flagged by a non-blocking WARN automatically; treat the underlying rule as binding regardless of whether that automated check is installed.
 
-## Convergence (mechanical — orchestrator-determined, written down)
+## The round record (mechanical bookkeeping, orchestrator-determined, written down)
 
 Each round, after reading the verifier output, the orchestrator writes a
-**Round Ledger**:
+**Round Record**:
 
 ```
-## Round <N> Ledger
-- New nodes added this round:        <list, or NONE>
-- Nodes refuted / relabeled / narrowed/inverted: <list, or NONE>
+## Round <N> Record
+- Findings this round (node, claim, evidence, confidence label): <list, or NONE>
+- Disposition per finding:
+  - P2 / cosmetic → folded inline (listed here; does NOT reopen the loop)
+  - P0/P1 → fixed; reopen: <spent | not needed yet | ALREADY SPENT — ESCALATE>
 - Inter-verifier contradictions:     <list, or NONE>
 - Orchestrator self-adjudications:   <list, or NONE>  (each re-enters as an unresolved node)
 - Unresolved nodes remaining:        <count + list>
 - Non-`Verified` load-bearing nodes: <list, or NONE>
 Verifier self-report: <quote "Restart? Y/N"> (ADVISORY — not the decision)
-Round CLEAN? = YES only if: zero new nodes AND zero refutations/relabels/inversions
-AND zero contradictions AND zero orch. self-adjudications AND zero unresolved nodes.
+Round resolved? = YES only if every finding above is either a folded P2 or a
+P0/P1 that is fixed and (if it needed the reopen) reopen-verified, AND zero
+unresolved load-bearing nodes remain.
 ```
 
-**Observe-only blindspot tally (only if this install's guards module, `23-guards`, is present):** when writing the Round-1 ledger, append each round-1 finding's blindspot class to this install's confidence-label-miss log (via the guards module's claim classifier). This is **observe-only** — it measures which blindspot classes recur; it MUST NOT steer the round count or the convergence decision. Skip cleanly if module `23-guards` isn't installed.
+**Observe-only blindspot tally (only if this install's guards module, `23-guards`, is present):** when writing the Round 1 record, append each Round-1 finding's blindspot class to this install's confidence-label-miss log (via the guards module's claim classifier). This is **observe-only** — it measures which blindspot classes recur; it MUST NOT steer a finding's disposition or the convergence decision. Skip cleanly if module `23-guards` isn't installed.
 
 Absence of refutation ≠ `Verified`. A node is only `Verified-correct` with positive
 file:line/query evidence; otherwise it stays `unresolved`.
 
-**The verifier's "Restart? NO" can NEVER make a round clean.** A round is clean
-ONLY when the orchestrator has positively enumerated the verifier's *body* (every
-finding, mechanism, child cause it named) into the Round Ledger and that
-enumeration is empty. If you have not written out the body's findings, the round
-is NOT clean — default to not-clean, never to clean. Reading the verdict instead
-of the body ships a wrong map; the verdict line exists only to be quoted and then
-ignored as a decision input.
+**The verifier's "Restart? NO" can NEVER resolve a round on its own.** A round is
+resolved ONLY when the orchestrator has positively enumerated the verifier's
+*body* (every finding, mechanism, child cause it named) into the Round Record
+and that enumeration contains no unfolded P0/P1. If you have not written out
+the body's findings, the round is NOT resolved — default to unresolved, never
+to resolved. Reading the verdict instead of the body ships a wrong map; the
+verdict line exists only to be quoted and then ignored as a decision input.
 
 **"Connected" is defined by a causal/dependency/data-flow edge, not by proximity.**
 A fault or effect in a *different file, module, or subsystem* is connected if it
 lies on the chain from the root — and is then a branch to map, never grounds to
 declare oscillation. You may NOT down-rank a causally-linked node to "tangential /
-different subsystem" to end the loop early.
+different subsystem" to avoid disposing of it honestly.
 
-## Productive branching vs oscillation (the guard that makes "until-no-new" terminate)
+## Oscillation guard — escalate early, don't spend the reopen on it
 
-A known failure mode: the loop hits a round count, sees a non-empty ledger of
-*new connected effects*, and wrongly escalates as "scope too broad" — killing a
-map that was still productively expanding.
+Two rounds is enough to expect closure on a well-scoped effect chain. Watch for
+the one failure mode that isn't just "found more work":
 
-Classify the round, every round:
+- **New finding** — Round 1 or Round 2 surfaces a genuinely new,
+  causally-connected node (new evidence, a child cause named for the first
+  time). This is the loop working as designed; classify it P0/P1/P2 and
+  follow the finding-disposition rule above.
+- **Oscillation** — a node already examined is re-litigated with NO new
+  evidence, OR two verifiers contradict on the same node across rounds with
+  neither producing new evidence that resolves it, OR the map neither grew
+  nor resolved. → THIS is the genuine "architecture/question is wrong"
+  signal — escalate to the human immediately with the map-so-far and the
+  stuck node(s), rather than spending the single reopen round chasing it.
 
-- **Productive branching** — the round added NEW genuinely-connected nodes and/or
-  resolved existing ones. The map is growing and/or filling in. → Success.
-  Continue. Do NOT escalate, do NOT stop, regardless of round number.
-- **Oscillation** — the round re-litigated an already-explored node with no new
-  evidence, OR two verifiers contradict on the same node across ≥2 rounds with no
-  new evidence resolving it, OR the map neither grew nor resolved. → THIS is the
-  genuine "architecture/question is wrong" signal, and it is the ONLY thing that
-  stops a non-clean loop short of convergence. Escalate to the owner with the
-  map-so-far and the stuck node(s).
-
-Round count is a **checkpoint cadence, not a stop**: at rounds 5, 10, 15, … pause
-and report the current Effect Map to the owner ("N rounds, map has K nodes, P
-rotten / Q unresolved, still productively branching — continuing unless you want
-to steer"). Absent owner steer, a productively-branching loop continues. Only
-oscillation forces a stop.
+A connected effect in a different file, module, or subsystem is still a
+branch on the chain — it is never grounds to wave a finding off as "scope too
+broad" or "tangential" to avoid disposing of it.
 
 ## Process
 
 ```dot
 digraph map {
     "Step 0: scope + intended behavior\n+ seed effect map" [shape=box];
-    "Iteration n: adversarial verifier(s)\n(REFUTE n-1's nodes, expand 1 ring, file:line, confidence label)" [shape=box];
-    "Update map + write Round Ledger" [shape=box];
-    "Clean round?\n(no new nodes, all resolved)" [shape=diamond];
-    "This round: productive or oscillating?" [shape=diamond];
-    "Checkpoint round (5/10/15)?" [shape=diamond];
-    "Report map to owner\n(continue unless steered)" [shape=box];
-    "Escalate: oscillating\n(question/architecture wrong)" [shape=doublecircle];
-    "Post-loop second-opinion synthesis\n(gate evidence first)" [shape=box];
-    "Second opinion surfaced a new node?" [shape=diamond];
-    "Finalize dossier\n(per-node fix/cut plan)" [shape=doublecircle];
+    "Round 1: adversarial verifier(s)\n(COMPLETE surface list, REFUTE, file:line, confidence label)" [shape=box];
+    "Fold R1 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)" [shape=box];
+    "Fold R2 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)" [shape=box];
+    "Escalate to human\n(map-so-far, reason)" [shape=doublecircle];
+    "The ONE reopen round\n(verifies the fix only)" [shape=box];
+    "Round 2: fresh-eyes terminal\n(reopens load-bearing citations\n+ Round 1's amendments)" [shape=box];
+    "Post-loop second-opinion synthesis\n(gate evidence write, dossier brief-append)" [shape=box];
+    "Finalize dossier\nStatus: CONVERGED\n(per-node fix/cut plan, open P2 notes listed)" [shape=doublecircle];
 
-    "Step 0: scope + intended behavior\n+ seed effect map" -> "Iteration n: adversarial verifier(s)\n(REFUTE n-1's nodes, expand 1 ring, file:line, confidence label)";
-    "Iteration n: adversarial verifier(s)\n(REFUTE n-1's nodes, expand 1 ring, file:line, confidence label)" -> "Update map + write Round Ledger";
-    "Update map + write Round Ledger" -> "Clean round?\n(no new nodes, all resolved)";
-    "Clean round?\n(no new nodes, all resolved)" -> "Post-loop second-opinion synthesis\n(gate evidence first)" [label="yes"];
-    "Clean round?\n(no new nodes, all resolved)" -> "This round: productive or oscillating?" [label="no"];
-    "This round: productive or oscillating?" -> "Escalate: oscillating\n(question/architecture wrong)" [label="oscillating"];
-    "This round: productive or oscillating?" -> "Checkpoint round (5/10/15)?" [label="productive"];
-    "Checkpoint round (5/10/15)?" -> "Report map to owner\n(continue unless steered)" [label="yes"];
-    "Checkpoint round (5/10/15)?" -> "Iteration n: adversarial verifier(s)\n(REFUTE n-1's nodes, expand 1 ring, file:line, confidence label)" [label="no — next round"];
-    "Report map to owner\n(continue unless steered)" -> "Iteration n: adversarial verifier(s)\n(REFUTE n-1's nodes, expand 1 ring, file:line, confidence label)";
-    "Post-loop second-opinion synthesis\n(gate evidence first)" -> "Second opinion surfaced a new node?";
-    "Second opinion surfaced a new node?" -> "Update map + write Round Ledger" [label="yes — RE-OPEN"];
-    "Second opinion surfaced a new node?" -> "Finalize dossier\n(per-node fix/cut plan)" [label="no"];
+    "Step 0: scope + intended behavior\n+ seed effect map" -> "Round 1: adversarial verifier(s)\n(COMPLETE surface list, REFUTE, file:line, confidence label)";
+    "Round 1: adversarial verifier(s)\n(COMPLETE surface list, REFUTE, file:line, confidence label)" -> "Fold R1 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)";
+    "Fold R1 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)" -> "Round 2: fresh-eyes terminal\n(reopens load-bearing citations\n+ Round 1's amendments)";
+    "Round 2: fresh-eyes terminal\n(reopens load-bearing citations\n+ Round 1's amendments)" -> "Fold R2 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)" [label="Round 2 findings"];
+    "Fold R2 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)" -> "Post-loop second-opinion synthesis\n(gate evidence write, dossier brief-append)" [label="P2 only or none"];
+    "Fold R2 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)" -> "The ONE reopen round\n(verifies the fix only)" [label="new P0/P1, reopen unspent"];
+    "Fold R2 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)" -> "Escalate to human\n(map-so-far, reason)" [label="new P0/P1, reopen spent"];
+    "The ONE reopen round\n(verifies the fix only)" -> "Round 2: fresh-eyes terminal\n(reopens load-bearing citations\n+ Round 1's amendments)";
+    "Post-loop second-opinion synthesis\n(gate evidence write, dossier brief-append)" -> "Fold R2 findings\n(P2 folds inline, never reopens;\nP0/P1 -> fix)" [label="second opinion found a P0/P1"];
+    "Post-loop second-opinion synthesis\n(gate evidence write, dossier brief-append)" -> "Finalize dossier\nStatus: CONVERGED\n(per-node fix/cut plan, open P2 notes listed)" [label="nothing new"];
 }
 ```
 
 ## Steps
 
 1. **Step 0 overview** (above). Seed the dossier + Effect Map.
-2. **Dispatch adversarial verifier(s) for iteration n.** Use the Audit reviewer
-   seat for ALL adversarial verifiers and code-reading roles (per the active
-   routing profile — this is the strongest available seat for adversarial
+2. **Dispatch the adversarial verifier(s).** Use the Audit reviewer seat for
+   ALL adversarial verifiers and code-reading roles (per the active routing
+   profile — this is the strongest available seat for adversarial
    code-reading, same seat REVIEW uses), the `general-purpose` agent for
-   SSH/DB/log forensics if applicable to this project, Retrieval-seat agents for
-   trivial git/DB one-liners only. Feed them n−1's map. Instruct EXPLICITLY:
-   "[MAP-VERIFIER] REFUTE these node(s), do not confirm. Expand ONE ring outward along causal/
-   data-flow edges from the resolved nodes. Every behavioral claim needs a
-   file:line/query + confidence label. Trace *why* each node is rotten/true — name
-   its child causes/effects as new candidate nodes. State INDETERMINATE where
-   evidence is absent. For EACH node, screen the five blindspot classes and raise a
-   new candidate node for any that apply: coefficient-vs-intuition (claim traced to
-   a fitted coefficient/file:line, not an output-pattern story); staleness
-   (cited result's config + snapshot-date matches current state); snapshot-vs-
-   permanent (a 'never/always/can't' claim that is a static read of a time-varying
-   quantity — name the dynamics); already-implemented (grep before treating as new);
-   inferred-dependency (a code path is not an inherent dependency). Do NOT call
-   the second-opinion seat yourself. End 'Restart? YES/NO' + list every
-   new finding/refutation." Parallel verifiers per branch cluster; cross-check
-   them for mutual contradiction. (The `[MAP-VERIFIER]` prefix bypasses module
-   `20-tier-system`'s standing-brief gate — `require_standing_brief` in
-   `task_checks.py` — so a MAP loop can run on a brief-less investigation branch;
-   the check matches the prefix case-insensitively.)
-3. **Update the map + write the Round Ledger** (orchestrator, by auditing verifier
+   SSH/DB/log forensics if applicable to this project, Retrieval-seat agents
+   for trivial git/DB one-liners only. For Round 1, hand the verifier the
+   COMPLETE surface list (every file, interface, and guard the change
+   touches) plus Step 0's seed map; for Round 2 (fresh-eyes) or the reopen
+   round, hand the verifier the current map and the specific node(s) to
+   re-examine. Instruct EXPLICITLY:
+   "[MAP-VERIFIER] REFUTE these node(s), do not confirm. You receive the
+   COMPLETE surface list — enumerate and refute ALL of it this round. Every
+   behavioral claim needs a file:line/query + confidence label. Trace *why*
+   each node is rotten/true — name its child causes/effects as new candidate
+   nodes. State INDETERMINATE where evidence is absent. For EACH node, screen
+   the five blindspot classes and raise a new candidate node for any that
+   apply: coefficient-vs-intuition (claim traced to a fitted coefficient/
+   file:line, not an output-pattern story); staleness (cited result's config +
+   snapshot-date matches current state); snapshot-vs-permanent (a
+   'never/always/can't' claim that is a static read of a time-varying
+   quantity — name the dynamics); already-implemented (grep before treating
+   as new); inferred-dependency (a code path is not an inherent dependency).
+   Do NOT call the second-opinion seat yourself. End 'Restart? YES/NO' + list
+   every new finding/refutation." Parallel verifiers per branch cluster;
+   cross-check them for mutual contradiction. (The `[MAP-VERIFIER]` prefix
+   bypasses module `20-tier-system`'s standing-brief gate —
+   `require_standing_brief` in `task_checks.py` — so a MAP loop can run on a
+   brief-less investigation branch; the check matches the prefix
+   case-insensitively.)
+3. **Update the map + write the Round Record** (orchestrator, by auditing verifier
    CONTENT — the verifier's YES/NO is advisory only). Add new nodes, relabel
    resolved/refuted/inverted ones, downgrade any non-evidenced node to
    `unresolved` (never silently `Verified`).
-4. **Clean?** Zero new nodes AND every node resolved → go to post-loop
-   second-opinion synthesis. Else classify productive vs oscillating and
-   continue/checkpoint/escalate per above. There is "continue (productive)",
-   "checkpoint-report (cadence)", or "escalate (oscillating)" — never "one more
-   round" as a guess.
-5. **Orchestrator adjudication never terminates a round.** You may read the
-   canonical source to understand a node, but any conclusion you reach yourself is
-   logged as an orch. self-adjudication = an `unresolved` node the NEXT round's
-   adversarial verifier must independently confirm/refute. Trust but verify
-   applies to YOU.
-6. **Post-loop second-opinion synthesis** (only after a clean round): make the
-   dossier durable; record gate evidence —
+4. **Disposition.** Fold every P2/cosmetic finding inline (record it, never
+   reopens). For each P0/P1: fixed and reopen-verified (or no reopen needed
+   yet) → resolved; fixed but the reopen is unspent → spend it now; a P0/P1
+   found with the reopen already spent → escalate. There is "fold inline",
+   "spend the reopen", or "escalate" — never "one more round" as a guess.
+5. **Orchestrator adjudication never resolves a P0/P1 on its own.** You may
+   fold a P2 inline directly — that's within the orchestrator's authority.
+   But you may NOT self-clear a P0/P1: any conclusion you reach yourself
+   about a P0/P1 is logged as an orch. self-adjudication = an `unresolved`
+   node that the reopen round's adversarial verifier must independently
+   confirm/refute. Trust but verify applies to YOU.
+6. **Post-loop second-opinion synthesis** (only after Round 2 terminal, or
+   the single reopen round, resolves every P0/P1): make the dossier durable;
+   record gate evidence —
    `python3 .claude/hooks/check_gate_evidence.py --write-evidence audit`
    (REVIEW is the canonical `audit` writer on a normal ticket's clean Step-6
    report; MAP writes `audit` when MAP is the convergence engine. Both
    idempotent — this project's ship gate accepts either). Then dispatch the
-   second-opinion seat. **If it surfaces a new node/refinement → the loop
-   RE-OPENS** (back to step 3). Budget: ≤1 mid-loop check if genuinely stuck on
-   oscillation, +1 post-loop synthesis.
+   second-opinion seat. **If it surfaces a new P0/P1 → spend the reopen if
+   unspent, else escalate** (back to step 3). Budget: ≤1 mid-loop check if
+   genuinely stuck on oscillation, +1 post-loop synthesis.
    After writing the dossier, if a standing brief exists at
    `docs/superpowers/briefs/<branch-slug>.md`, append
    `**MAP-dossier:** <this dossier's path>` to it **iff `**MAP-dossier:**` is
@@ -291,40 +324,40 @@ digraph map {
    manual step.
 
 7. **Finalize the dossier.** Status line, literal:
-   - `Status: CONVERGED` ONLY if the last round was clean, the second-opinion
-     seat surfaced nothing new, and every node is `Verified-correct` or `rotten`
-     with a fix/cut decision.
-   - Otherwise `Status: <root> ROOT-CAUSE CONVERGED; OPEN: <unresolved nodes>` —
-     never bare "CONVERGED" with open nodes.
-   - Dossier contains: the Effect Map, per-round Ledger trace, per-node confidence
+   - `Status: CONVERGED` when the budget completes (Round 1, Round 2, and the
+     reopen if it was spent) with every P0/P1 resolved — open P2 notes are
+     listed, not blockers.
+   - `Status: OPEN — escalated <reason>` if a P0/P1 surfaced with the reopen
+     already spent — never bare "CONVERGED" with an unresolved P0/P1.
+   - Dossier contains: the Effect Map, per-round record trace, per-node confidence
      label + file:line, and a fix/cut plan per rotten node for implementers.
 
 ## Red flags — STOP, you are rationalizing
 
 | Thought | Reality |
 |---|---|
-| "Round 5, ledger not empty, escalate and stop." | Round count never stops the loop. Is it PRODUCTIVE (continue) or OSCILLATING (escalate)? New connected effects = productive = continue. |
-| "These new findings are scope-creep / a different subsystem." | A connected effect is a branch, not creep. Add it, label fix/cut/defer. The point is the COMPLETE map. |
-| "The verifier said Restart? NO." | The verdict CANNOT make a round clean. Clean requires you to have written the body's findings into the Ledger and found them empty. |
+| "This is P2 — I'll quietly skip mentioning it." | Fold P2s inline AND record them in the dossier. Silent omission is not folding. |
+| "I already used the reopen; let me just fix this one more thing myself." | A P0/P1 after the reopen is spent is an ESCALATE, not a self-fix. Stop and hand it to the human. |
+| "These new findings are scope-creep / a different subsystem." | A connected effect is a branch, not creep. Add it, label fix/cut/defer, and disposition it by severity. |
+| "The verifier said Restart? NO." | The verdict CANNOT resolve a round. You must have enumerated the verifier's body into the Round Record and found it empty of P0/P1s. |
 | "This connected effect is really a different subsystem / tangential." | Connection = a causal/data-flow edge, not file proximity. On the chain ⇒ it is a branch. |
-| "I'll confirm this node looks right and move on." | The method is REFUTATION. n re-examines n−1 by attacking it. A confirmatory pass ships a wrong map (a confirmatory round once wrongly labeled a healthy safeguard as broken; the next, adversarial round caught the mislabel and inverted it). |
-| "I can see which side is right — I'll decide it myself." | Self-adjudication = an unresolved node for the next round, not a resolution. |
-| "The second opinion only refined it; fold it in." | A post-loop second-opinion node RE-OPENS the loop. No silent folds. |
-| "Root cause is solid, call it CONVERGED." | Open/unresolved nodes ⇒ not CONVERGED. Enumerate them in the status. |
-| "Map keeps growing, the question must be wrong." | Growing ≠ wrong. Only OSCILLATION (re-litigating a node, no new evidence) means the question is wrong. |
+| "I'll confirm this node looks right and move on." | The method is REFUTATION. Round 2 attacks Round 1's map; a confirmatory pass ships a wrong map (a confirmatory pass once wrongly labeled a healthy safeguard as broken; the next, adversarial pass caught the mislabel and inverted it). |
+| "I can see which side is right — I'll decide it myself." | Self-adjudication = an unresolved node for the reopen round, not a resolution. |
+| "The second opinion only refined it; fold it in." | A second-opinion P0/P1 spends the reopen if unspent, else escalates. No silent folds. |
+| "Root cause is solid, call it CONVERGED." | An unresolved P0/P1 ⇒ not CONVERGED; escalate instead. Open P2 notes are fine — list them. |
 | "Skip Step 0, I know what the code should do." | Without the intended-behavior reference you cannot label a node rotten vs correct. Do Step 0. |
-| "Let me map the whole system at once." | No — expand ONE ring outward along confirmed edges. Global fan-out is slower and skips nodes. |
+| "Let me spend a third round on my own judgment." | The budget is fixed: Round 1, Round 2, at most one reopen. Anything past that needs an escalation, not a private decision. |
 
 ## Rules
 
 1. Goal = the COMPLETE map of the effect-chain (all connected rotten links to fix/cut + load-bearing dependencies confirmed), not a single-claim yes/no.
 2. Step 0 scope/intended-behavior overview precedes every adversarial round.
-3. Iteration n adversarially re-examines n−1's map and expands one ring outward along causal/data-flow edges. REFUTATION is the method.
-4. Convergence = a full round adds zero new nodes AND every node resolved. Not a round count, not a verifier verdict, not your judgment.
-5. Productive branching → continue. Oscillation (re-litigation / unresolved contradiction with no new evidence) → escalate. Rounds 5/10/15 = checkpoint-report cadence, not a stop.
+3. Round 1 adversarially examines Step 0's seed map against the complete surface list; Round 2 (fresh-eyes) adversarially re-examines Round 1's map. REFUTATION is the method.
+4. Convergence = the fixed budget (Round 1, Round 2, one reopen if spent) completes with every P0/P1 resolved. Not an open-ended search, not a verifier verdict, not your judgment.
+5. Fold P2/cosmetic findings inline; they never reopen the loop. A P0/P1 spends the single reopen round; oscillation (re-litigation / unresolved contradiction with no new evidence) escalates EARLY, before the reopen is spent.
 6. Verifiers REFUTE, never confirm; file:line + confidence label on every node every round; they must name child causes/effects of each node.
-7. Inter-verifier contradiction and orchestrator self-adjudication are both `unresolved` nodes — non-clean.
-8. A post-loop second-opinion new node re-opens the loop.
-9. "CONVERGED" reserved for all-nodes-resolved + second-opinion-clean. Otherwise enumerate OPEN nodes.
-10. Persist/refresh the Effect Map + Round Ledger trace in the dossier every round (`map-dossier.md`).
+7. Inter-verifier contradiction and orchestrator self-adjudication on a P0/P1 are both `unresolved` nodes — not yet resolved.
+8. A post-loop second-opinion P0/P1 spends the reopen if unspent, else escalates.
+9. "CONVERGED" reserved for every P0/P1 resolved + second-opinion clear of new P0/P1s. Otherwise `Status: OPEN — escalated <reason>`.
+10. Persist/refresh the Effect Map + Round Record trace in the dossier every round (`map-dossier.md`).
 11. Never present an unconverged map as fact in chat, ticket, report, or dossier.
