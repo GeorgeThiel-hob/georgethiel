@@ -48,6 +48,12 @@ Standing briefs and the token-economy parameters are **FULL-only** — neither
 - `haiku_batching: true`
 - `context_offload: true`
 
+Context reset at the spec→execute boundary + per-task-reviewer model tier
+scaled to diff size (reference only — the operative copy lives in the
+installed CLAUDE.md `## Workflow` span, assembled from
+`modules/00-core/workflow-table-FULL.md`; this file is never read by
+`installer.py`).
+
 ## Deliberately absent
 
 > —

@@ -19,9 +19,10 @@ both variants and selecting one at copy time is cheaper and safer than trying
 to write one file that branches at runtime.
 
 MAP and REPORT don't vary, because what a profile changes about them is *whether
-they run*, not *how* they work. MAP's mechanism (Step 0 seed, ring-expansion,
-Round Ledger, oscillation guard) is identical whether it's mandatory (FULL,
-`map_mandatory: true`) or simply unused (STANDARD, `map_mandatory: false`) — the
+they run*, not *how* they work. MAP's mechanism (Step 0 seed, a fixed two-round
+budget with a single reopen round, oscillation guard) is identical whether it's
+mandatory (FULL, `map_mandatory: true`) or simply unused (STANDARD,
+`map_mandatory: false`) — the
 rigor profile toggles a parameter that governs *when this project requires it*,
 not the loop itself. Same for REPORT: whether a ticket reaches REPORT's "T3 Critical
 pipeline" trigger depends entirely on whether T3 exists at this rigor profile
@@ -50,13 +51,17 @@ split).
    specific named database files from the pattern-source project. Replaced with a
    generic staging-vs-production conflation example (treating "this ran against
    staging" as proof it holds for production, when the two diverge).
-4. **Dossier-lore strip.** Four separate citations of past incidents by
-   specific date or ticket ID (a round-count-escalation failure mode, a
-   mislabeled-then-corrected node, a circularity-rejection convention's ticket
-   ID, an observe-only tally feature's ticket ID) are all generalized to
-   describe the underlying failure MODE or convention, with the specific
-   date/ticket-ID removed. None of the four lessons need the incident history
-   to teach the point.
+4. **Dossier-lore strip (partially superseded by the C1 budget rewrite,
+   item 9 below).** Three separate citations of past incidents by specific
+   date or ticket ID (a mislabeled-then-corrected node, a circularity-rejection
+   convention's ticket ID, an observe-only tally feature's ticket ID) are
+   generalized to describe the underlying failure MODE or convention, with the
+   specific date/ticket-ID removed. None of the three lessons need the
+   incident history to teach the point. A fourth citation — an incident about
+   escalating purely because a round count was reached — no longer survives
+   in any form: the fixed round budget in item 9 below removes that judgment
+   call entirely. A round past the budget is never a self-judgment call, only
+   an escalation, so there is nothing left of that incident to generalize.
 5. **Dossier filename rename.** The source's dossier artifact filename is
    itself one of this kit's deny-listed literal tokens (it names a specific
    internal convention, not a generic term). The kit variant renames it to
@@ -79,6 +84,20 @@ split).
 8. **"the bot" → "the system"**, throughout the description and body — this
    kit maps effect-chains in any kind of project, not one specific kind of
    application.
+9. **C1 budget rewrite (2026-07-14, KIT-LEAN-FULL-01).** The source's
+   convergence rule was originally open-ended: each round expanded the map one
+   layer outward from the finding and the loop would not stop until an entire
+   round surfaced nothing new, with no ceiling on how many rounds that could
+   take. Field data showed the later rounds reliably caught only cosmetic
+   issues, so the rule was replaced with a fixed budget: a first adversarial
+   round is handed the complete surface up front (rather than discovering it
+   one layer at a time), a second fresh-eyes round independently re-examines
+   the first round's conclusions, and at most one further round is allowed to
+   verify a fix for a genuine defect found late — anything past that is never
+   a self-judgment call, only an escalation to a human. Cosmetic/minor
+   findings fold in immediately at any point and never consume that budget.
+   This is a substantive behavior change, not a scrub — recorded here per this
+   doc's charter (see the intro) rather than skipped as cosmetic.
 
 ## REPORT — full delta list
 

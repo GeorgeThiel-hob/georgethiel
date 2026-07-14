@@ -19,3 +19,12 @@ REVIEW ships in two variants (lite at STANDARD, full at FULL); GIT ships in two
 variants (github, local) selected at install by how code reaches your default
 branch. Full skill deltas + the kit tier model:
 `docs/harness/21-pipeline-skills.md`.
+
+Per-task reviews during implement are risk-scoped, not universal: dispatch one
+ONLY for a task that touches a `RISK_PREFIXES` path or introduces non-trivial
+logic — new behavior, branching, state, or a cross-file interface. A task that
+is docs/config/tests-only, or a mechanical transcription of already-reviewed
+content, skips the per-task review and goes straight to the whole-branch
+REVIEW instead. This is a FULL-profile leanness rule: an unscoped per-task
+review taxes every task at 1-2 extra reviewer dispatches for no added catch
+rate on that class of task.
