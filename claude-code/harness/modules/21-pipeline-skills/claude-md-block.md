@@ -20,7 +20,7 @@ variants (github, local) selected at install by how code reaches your default
 branch. Full skill deltas + the kit tier model:
 `docs/harness/21-pipeline-skills.md`.
 
-Per-task reviews during implement are risk-scoped, not universal: dispatch one
+Per-task reviews during implement are risk-scoped, not universal: [seat:scaled_reviewer] dispatch one
 ONLY for a task that touches a `RISK_PREFIXES` path or introduces non-trivial
 logic — new behavior, branching, state, or a cross-file interface. A task that
 is docs/config/tests-only, or a mechanical transcription of already-reviewed

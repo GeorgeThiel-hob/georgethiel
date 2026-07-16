@@ -37,7 +37,7 @@ before choosing. Ladder #1 if you pick a framing anyway.
 > fill (3):
 
 SLOT:framing-verdict — Which framing the distinguishing checks selected, with the decisive
-observation quoted (one line) or the checking subagent's report path. "Most plausible" is not
+observation quoted (one line) or the [seat:retrieval] checking subagent's report path. "Most plausible" is not
 a verdict; a verdict cites the observation that killed the alternatives.
 > fill:
 
@@ -65,7 +65,7 @@ re-verification).
 
 SLOT:blast-radius — What depends on this diagnosis being right: which conclusions, open
 tickets, data repairs, or reports die if the root cause is actually something else. Items here
-with high blast radius get the strongest-seat (ladder #8, pre-ship batch) before you act on
+with high blast radius get the [seat:second_opinion] strongest-seat (ladder #8, pre-ship batch) before you act on
 them.
 > fill:
 

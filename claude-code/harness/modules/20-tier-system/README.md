@@ -21,6 +21,9 @@ their own `settings-fragment.json` event). This module ships no
 - `files/dot-claude/hooks/lib/brief_paths.py` — **verbatim copy** of
   `.claude/hooks/lib/brief_paths.py`. Byte-identical; not a spec-named file, but
   a required transitive dependency — see "Spec-gap fix" below.
+- `files/dot-claude/hooks/lib/seat_checks.py` — **kit-authored, NEW.** The
+  seat→model routing check (`check_seat_routing`), dispatcher-routed from module
+  10's `pretooluse_dispatcher.py`. See "Seat routing enforcement" below.
 - `files/docs/harness/20-tier-system.md` — the LITE (STANDARD-profile) and FULL
   (FULL-profile) tier tables.
 - `claude-md-block.md` — the CLAUDE.md rule-block fragment installed at every
@@ -106,6 +109,54 @@ does not name explicitly; without shipping it, every STANDARD/FULL install's
 import-closure self-check would fail. `brief_paths.py` is 23 lines, fully
 generic (resolves a branch slug to a brief path under
 `docs/superpowers/briefs/`), and ships byte-identical to source.
+
+## Seat routing enforcement
+
+`seat_checks.py`'s `check_seat_routing` is a PreToolUse check (dispatcher-routed
+from module 10, like this module's other checks) that validates every
+`Task`/`Agent` dispatch against the installed `.claude/state/seat-table.json`.
+Be honest with adopters about exactly what it does and does not do — the honesty
+statements in `START-HERE.md` §6/§9 are the member-facing version of this.
+
+**What blocks.** A dispatch is blocked (in the default `block` mode) when:
+
+- it carries **no `model` param** — without one the dispatch would silently
+  inherit the orchestrator's model;
+- it declares **no seat tag**, or a tag that lands **beyond the leading window**
+  (a present-but-late tag blocks with its own message rather than being treated
+  as absent), or **more than one** seat tag in the window, or an **unknown** seat
+  name;
+- the requested model is **not in the declared seat's allow-list** — validated in
+  **both directions**, so an over-modeled dispatch (stronger model than the seat
+  permits) blocks just as an under-modeled one does — or the model string cannot
+  be **resolved to a known alias** (`haiku`/`sonnet`/`opus`/`fable`), including
+  the ambiguous case where two distinct alias tokens appear.
+
+**Tag convention.** Lead the dispatch with a `[seat:<name>]` tag (case-insensitive;
+hyphens/spaces normalize to underscore). The seven seat names are `orchestrator`,
+`retrieval`, `workers`, `audit_reviewer`, `second_opinion`, `scaled_reviewer`,
+and `persona` (`persona` only resolves when module `31-debate-tools` is installed).
+**Lead-position rule:** a tag in the `prompt` must **start within the first 500
+characters** to count; a tag in the `description` counts at any position. Keep
+exactly one.
+
+**The `SEAT_ROUTING_MODE=warn` escape.** Set `SEAT_ROUTING_MODE=warn` in the
+environment to downgrade every violation from a block to an allow-with-stderr-
+warning. This is the sanctioned way to run a model below a seat's floor when a
+member genuinely needs to (see `START-HERE.md` §9 on the fixed-model floors).
+
+**Fail-open on the table itself.** A **missing or corrupt** `seat-table.json`
+does not wedge dispatching — the check emits a **WARN once** (suppressed on repeat
+via a marker file) and **allows** the dispatch. The routing check is simply inert
+until a valid table is re-installed. Like every hook here, an unexpected error in
+the check also fails open (logs and allows).
+
+**Uninstall residue — accepted.** The warn-once marker
+`.claude/state/.seat-table-warn-emitted` is written by the hook **at runtime**
+(the first time it warns), not deposited by the installer. `uninstall.py` removes
+only what the installer wrote, so it does **not** remove this marker — the same
+accepted residue class as the runtime-created gate-evidence directories. Deleting
+it by hand is harmless (it is re-created on the next warn).
 
 ## `claude-md-block.md`
 

@@ -68,6 +68,7 @@ _maybe_register("task_checks", "block_finishing_branch_skill")
 _maybe_register("task_checks", "check_ac_id_prefix")
 _maybe_register("task_checks", "check_plan_by_reference")
 _maybe_register("task_checks", "require_standing_brief")
+_maybe_register("seat_checks", "check_seat_routing")
 
 
 def _find_branch_spec() -> Optional[Path]:
@@ -160,10 +161,17 @@ def dispatch(stdin_dict: dict) -> dict:
             result = _safe_check(check_plan_by_reference, stdin_dict)
             if result["decision"] == "block":
                 return result
-        # Hook 8
+        # Hook 8 — capture-and-continue (was an unconditional return) so the
+        # seat check can still run when the brief gate passes.
         require_standing_brief = _CHECKS.get("require_standing_brief")
         if require_standing_brief is not None:
-            return _safe_check(require_standing_brief, stdin_dict)
+            result = _safe_check(require_standing_brief, stdin_dict)
+            if result["decision"] == "block":
+                return result
+        # Seat routing check (KIT-SEAT-ENFORCE-01) — last in the branch.
+        check_seat_routing = _CHECKS.get("check_seat_routing")
+        if check_seat_routing is not None:
+            return _safe_check(check_seat_routing, stdin_dict)
         return {"decision": "allow"}
 
     if tool_name in ("Edit", "Write", "MultiEdit"):

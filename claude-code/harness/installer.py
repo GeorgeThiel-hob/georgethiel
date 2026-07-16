@@ -71,6 +71,69 @@ END_GITIGNORE = "# END handoff-kit harness"
 # hashed_paths, which deliberately excludes them (adding them breaks the AC-6 baseline).
 GENERATED_TOPLEVEL_DOCS = ("HARNESS-VERSION.md", "HARNESS-INSTALL-REPORT.md")
 
+# Generated member-editable state file. Load-bearing for the same three
+# consumers as GENERATED_TOPLEVEL_DOCS (uninstall delete-set, result JSON,
+# verify hash set) — but NOT the HARNESS-VERSION integrity baseline (regenerated
+# state must not trip member-edit drift) and NOT the {{TOKEN}} scan (no ADAPT tokens).
+GENERATED_STATE_FILES = (".claude/state/seat-table.json",)
+
+# Per-profile seat -> allowed model aliases. Mirrors profiles/routing-*.md seat
+# tables (drift-guarded by test_drift_guard_markdown_matches_constant).
+SEAT_TABLES = {
+    "PRO": {
+        "orchestrator": ["sonnet"],
+        "retrieval": ["haiku"],
+        "workers": ["sonnet"],
+        "audit_reviewer": ["sonnet"],
+        "second_opinion": ["sonnet"],
+    },
+    "MAX5": {
+        "orchestrator": ["sonnet"],
+        "retrieval": ["haiku"],
+        "workers": ["sonnet"],
+        "audit_reviewer": ["opus"],
+        "second_opinion": ["opus"],
+    },
+    "MAX20": {
+        "orchestrator": ["opus", "sonnet"],  # "Opus 4.8 (or Sonnet for economy)"
+        "retrieval": ["haiku"],
+        "workers": ["sonnet"],
+        "audit_reviewer": ["opus"],
+        "second_opinion": ["opus"],
+    },
+}
+
+# Derived-role fixtures.
+_PERSONA_SEAT = ["haiku", "sonnet", "opus"]  # COUNCIL model spectrum
+_PERSONA_MODULE = "31-debate-tools"
+
+
+def _resolve_seats(routing: str, modules: list) -> dict:
+    """Emitted seats: the five profile seats + derived scaled_reviewer (all
+    profiles, = union(workers, audit_reviewer)) + persona (iff module 31)."""
+    base = {k: list(v) for k, v in SEAT_TABLES[routing].items()}
+    base["scaled_reviewer"] = sorted(set(base["workers"]) | set(base["audit_reviewer"]))
+    if _PERSONA_MODULE in modules:
+        base["persona"] = list(_PERSONA_SEAT)
+    return base
+
+
+def write_seat_table(spec: dict, dest: Path) -> None:
+    """Emit .claude/state/seat-table.json from the resolved routing profile.
+    routing is validated in load_and_validate_spec, so SEAT_TABLES indexing is
+    safe here. Written unconditionally from main() so re-install/--force
+    regenerates it on a routing-profile swap."""
+    routing = spec["routing"]
+    table = {
+        "routing_profile": routing,
+        "generated_by": "handoff-kit installer",
+        "seats": _resolve_seats(routing, spec.get("modules", [])),
+    }
+    state_dir = dest / ".claude" / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    _write_text(state_dir / "seat-table.json", json.dumps(table, indent=2) + "\n")
+
+
 _SKILL_VARIANT_RE = re.compile(r"^SKILL-(lite|full|github|local)\.md$")
 
 
@@ -292,7 +355,11 @@ def write_install_manifest(spec: dict, kit_root: Path, dest: Path) -> None:
     manifest = {
         "manifest_version": 1,
         "modules": list(spec.get("modules", [])),
-        "files": _planned_payload_files(spec, kit_root) + list(GENERATED_TOPLEVEL_DOCS),
+        "files": (
+            _planned_payload_files(spec, kit_root)
+            + list(GENERATED_TOPLEVEL_DOCS)
+            + list(GENERATED_STATE_FILES)
+        ),
         "claude_md": {"path": "CLAUDE.md", "mode": detect_claude_md_mode(dest)},
         "gitignore": {"path": ".gitignore", "mode": detect_gitignore_mode(dest)},
         "settings": {
@@ -540,6 +607,13 @@ def load_and_validate_spec(spec_path: str, kit_root: Path) -> dict:
         raise InstallError(
             f"unresolved ADAPT token(s): {', '.join(missing)} — "
             f"add value(s) to spec['adapt']"
+        )
+
+    routing = spec.get("routing")
+    if routing not in SEAT_TABLES:
+        raise InstallError(
+            f"unknown routing profile: {routing!r} — valid profiles: "
+            f"{', '.join(sorted(SEAT_TABLES))}"
         )
 
     return spec
@@ -798,6 +872,7 @@ def emit_result_json(
             set(written_paths)
             | {".claude/settings.json", ".gitignore", "CLAUDE.md"}
             | set(GENERATED_TOPLEVEL_DOCS)
+            | set(GENERATED_STATE_FILES)
         ),
         "warnings": warnings,
         "claude_md_mode": claude_md_mode,
@@ -817,6 +892,7 @@ def _verify_evidence_file_set(written_paths: list) -> list:
         set(written_paths)
         | {".claude/settings.json", ".gitignore", "CLAUDE.md"}
         | set(GENERATED_TOPLEVEL_DOCS)
+        | set(GENERATED_STATE_FILES)
     )
 
 
@@ -1084,6 +1160,7 @@ def main(argv: list | None = None) -> int:
         write_harness_version(
             spec, dest, written, claude_md_mode, gitignore_mode, now_iso
         )
+        write_seat_table(spec, dest)
         warnings = skill_collision_glob(dest)
         write_install_report(spec, dest, warnings)
         write_verify_evidence(spec, dest, written, now_iso, skill_collisions=warnings)

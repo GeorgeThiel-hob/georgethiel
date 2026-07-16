@@ -29,6 +29,10 @@ This skill uses the seat table from the active routing profile (`profiles/routin
 2. Escalate one seat tier (Retrieval→Workers, Workers→Audit reviewer) and re-prompt
 3. Halt and report to the orchestrator
 
+### Seat-tag convention
+
+Each operative dispatch in this skill LEADS its prompt (or its `description`) with a `[seat:<name>]` tag so the kit's seat->model routing check can enforce it. The seven legal seats are: `orchestrator`, `retrieval`, `workers`, `audit_reviewer`, `second_opinion`, `scaled_reviewer`, `persona`. Grammar: `[seat:<name>]`, lowercase with underscores; the tag's regex-match must START within the first 500 characters of the assembled dispatch text (the prompt lead), or appear anywhere in the `description`. **Escalated re-dispatches tag the ESCALATED seat, not the original** -- on a schema-shape validation failure the re-prompt after escalating one seat tier (Retrieval->Workers->Audit reviewer) carries the escalated seat's tag.
+
 ## When to Use
 
 - **T1 Micro:** Not invoked directly. T1 uses the automated T1 safety gate (see below) instead of a full audit loop.
@@ -51,7 +55,7 @@ T1 changes don't use the full audit loop. Instead, an automated safety gate runs
 
 **If all checks pass:** Proceed with Definition of Done (this project's test/lint/format/type commands — `{{TEST_CMD}}` / `{{LINT_CMD}}` / `{{TYPE_CMD}}`, from the CLAUDE.md skeleton) → commit → ship.
 
-**Seat:** Dispatch safety gate checks via the Workers seat. Gate output feeds a commit decision — that needs judgment beyond the Retrieval seat's mechanical lookups.
+**Seat:** [seat:workers] Dispatch safety gate checks via the Workers seat. Gate output feeds a commit decision — that needs judgment beyond the Retrieval seat's mechanical lookups.
 
 ## Severity Model
 
@@ -112,7 +116,7 @@ If the user didn't specify scope, infer from context (current ticket, recent cha
 
 ### 2. Run Review
 
-Dispatch the Audit reviewer seat (fresh context, no main-conversation pollution).
+[seat:audit_reviewer] Dispatch the Audit reviewer seat (fresh context, no main-conversation pollution).
 
 **The reviewer must return findings as a JSON array** where each entry matches this shape:
 
@@ -131,7 +135,7 @@ Dispatch the Audit reviewer seat (fresh context, no main-conversation pollution)
 
 **After the reviewer returns, confirm the shape.** Every entry needs all seven fields, `severity` must be one of P0/P1/P2, and `line` must be an integer. A malformed or incomplete return is a validation failure — follow the 3-step escalation above.
 
-**Mechanical sub-operations** use the Retrieval seat:
+**Mechanical sub-operations** [seat:retrieval] use the Retrieval seat:
 - Test/lint/format/type-check invocation and output parsing (`{{TEST_CMD}}` / `{{LINT_CMD}}` / `{{TYPE_CMD}}`)
 - TODO debt scan (`grep -rn "# TODO" <this project's source + test roots>`)
 - Tier re-classification scan (pattern-matching spec against T3 indicator keywords)
@@ -166,7 +170,7 @@ Verify every numbered AC has a corresponding implementation in the diff.
 1. Locate the spec at `docs/superpowers/specs/<spec>.md` (most recent on the current branch, or the spec linked in the standing brief at `**Spec:**`).
 2. Extract every line under `## Acceptance criteria` matching `- [ ] AC-N: <text>`. If zero matches, the spec is legacy-format and Step 2b is skipped.
 3. Ensure `docs/superpowers/audits/` exists (`mkdir -p docs/superpowers/audits`).
-4. Dispatch ONE Retrieval-seat subagent with: the AC list, `git diff main...HEAD --stat` summary, and full diff via `git diff main...HEAD`. It grep/AST-walks for evidence per AC and writes `docs/superpowers/audits/<branch-slug>-code-surface.md` with this format:
+4. [seat:retrieval] Dispatch ONE Retrieval-seat subagent with: the AC list, `git diff main...HEAD --stat` summary, and full diff via `git diff main...HEAD`. It grep/AST-walks for evidence per AC and writes `docs/superpowers/audits/<branch-slug>-code-surface.md` with this format:
 
    ```
    AC-1 → src/foo.py:120-145 (function `bar` matches "...")
@@ -207,11 +211,11 @@ Every finding gets a severity:
 
 - **P2:** Add `# TODO` comment in the code. Do NOT fix during audit — these ship as-is.
 - **P0 and P1 — check fix seat routing:**
-  - If `is_high_stakes_logic == true` → fix using the Audit reviewer seat
+  - [seat:audit_reviewer] If `is_high_stakes_logic == true` → fix using the Audit reviewer seat
   - If `propagation_path_uncertain == true` → fix using the Audit reviewer seat
   - If `file` matches this install's `RISK_PREFIXES` → fix using the Audit reviewer seat
   - If T3 (or T3-RISK) audit and current round is in the final 2 rounds of the cap → fix using the Audit reviewer seat (round-number escalation — subtle cross-file reasoning)
-  - Otherwise → fix using the Workers seat
+  - [seat:workers] Otherwise → fix using the Workers seat
 - Minimal change needed. Run tests after each fix.
 
 ### 4b. Re-Verify Gate (mandatory after P0/P1 fixes)
@@ -225,7 +229,7 @@ After applying P0/P1 fixes and confirming tests pass, a re-verify second-opinion
    python3 .claude/hooks/check_gate_evidence.py --write-evidence audit-fix
    ```
 
-2. Dispatch the second-opinion seat — describe what was fixed and ask whether the fixes are correct.
+2. [seat:second_opinion] Dispatch the second-opinion seat — describe what was fixed and ask whether the fixes are correct.
    - If it confirms: proceed to Step 5.
    - If it identifies new issues: apply fixes, run tests, then repeat this gate (record evidence again, dispatch again).
 
@@ -235,7 +239,7 @@ After applying P0/P1 fixes and confirming tests pass, a re-verify second-opinion
 
 ### 5. Re-Review (if P0 or P1 were found)
 
-Go back to Step 2 and run the **full audit again**. This includes dispatching a fresh Audit-reviewer-seat pass. Fixes can introduce new bugs — a clean re-audit proves they didn't.
+Go back to Step 2 and run the **full audit again**. This includes [seat:audit_reviewer] dispatching a fresh Audit-reviewer-seat pass. Fixes can introduce new bugs — a clean re-audit proves they didn't.
 
 Check the round count against the cap (checkpoint cadence, not a hard stop):
 - **Zero new findings this round → clean; proceed to Step 6.**

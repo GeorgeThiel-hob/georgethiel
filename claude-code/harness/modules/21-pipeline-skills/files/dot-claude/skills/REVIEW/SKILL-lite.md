@@ -24,6 +24,10 @@ This skill uses the seat table from the active routing profile (`profiles/routin
 - **Workers seat**: T1 safety-gate judgment, P0/P1/P2 severity classification, fixes, final report
 - **Audit reviewer seat** (finding generation, always): dispatch it fresh-context, no main-conversation pollution
 
+### Seat-tag convention
+
+Each operative dispatch in this skill LEADS its prompt (or its `description`) with a `[seat:<name>]` tag so the kit's seat->model routing check can enforce it. The seven legal seats are: `orchestrator`, `retrieval`, `workers`, `audit_reviewer`, `second_opinion`, `scaled_reviewer`, `persona`. Grammar: `[seat:<name>]`, lowercase with underscores; the tag's regex-match must START within the first 500 characters of the assembled dispatch text (the prompt lead), or appear anywhere in the `description`. **Escalated re-dispatches tag the ESCALATED seat, not the original** -- on a schema-shape validation failure the re-prompt after escalating one seat tier (Retrieval->Workers->Audit reviewer) carries the escalated seat's tag.
+
 ## When to Use
 
 - **T1 Micro:** Not invoked directly. T1 uses the automated T1 safety gate (see below) instead of the audit pass.
@@ -46,7 +50,7 @@ T1 changes don't use the audit pass. Instead, an automated safety gate runs befo
 
 **If all checks pass:** Proceed with Definition of Done (this project's test/lint/format/type commands — `{{TEST_CMD}}` / `{{LINT_CMD}}` / `{{TYPE_CMD}}`, from the CLAUDE.md skeleton) → commit → ship.
 
-**Seat:** Dispatch safety gate checks via the Workers seat. Gate output feeds a commit decision — that needs judgment beyond the Retrieval seat's mechanical lookups.
+**Seat:** [seat:workers] Dispatch safety gate checks via the Workers seat. Gate output feeds a commit decision — that needs judgment beyond the Retrieval seat's mechanical lookups.
 
 ## Severity Model
 
@@ -97,7 +101,7 @@ If the user didn't specify scope, infer from context (current ticket, recent cha
 
 ### 2. Run Review
 
-Dispatch the Audit reviewer seat (fresh context, no main-conversation pollution).
+[seat:audit_reviewer] Dispatch the Audit reviewer seat (fresh context, no main-conversation pollution).
 
 **The reviewer must return findings as a JSON array** where each entry matches this shape:
 
@@ -111,7 +115,7 @@ Dispatch the Audit reviewer seat (fresh context, no main-conversation pollution)
 }
 ~~~
 
-**Mechanical sub-operations** use the Retrieval seat:
+**Mechanical sub-operations** [seat:retrieval] use the Retrieval seat:
 - Test/lint/format/type-check invocation and output parsing (`{{TEST_CMD}}` / `{{LINT_CMD}}` / `{{TYPE_CMD}}`)
 - TODO debt scan (`grep -rn "# TODO" <this project's source + test roots>`)
 
@@ -147,7 +151,7 @@ Every finding gets a severity:
 ### 4. Fix or Track
 
 - **P2:** Add `# TODO` comment in the code. Do NOT fix during audit — these ship as-is.
-- **P0 and P1:** Fix using the Workers seat. Minimal change needed. Run tests after each fix.
+- **P0 and P1:** [seat:workers] Fix using the Workers seat. Minimal change needed. Run tests after each fix.
 - No re-dispatch of the reviewer after fixing — this profile's single-pass design (see Overview).
 
 ### 5. Report

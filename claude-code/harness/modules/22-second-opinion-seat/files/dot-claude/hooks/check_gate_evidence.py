@@ -81,7 +81,8 @@ def main() -> None:
         else:
             print(
                 f"GATE EVIDENCE: FAIL (phase={phase} short of threshold={threshold}) — "
-                "dispatch the second-opinion seat for this phase, then: "
+                "dispatch the second-opinion seat [seat:second_opinion] "
+                "for this phase, then: "
                 f"python3 .claude/hooks/check_gate_evidence.py --write-evidence {phase}"
             )
             sys.exit(1)

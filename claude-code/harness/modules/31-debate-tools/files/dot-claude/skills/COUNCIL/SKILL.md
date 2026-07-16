@@ -42,7 +42,7 @@ lower-tier plan (e.g. Pro), fall back per the active routing profile
 (`profiles/routing-*.md`) and the model-availability rule (drop one tier rather than
 trusting silent substitution).
 
-- **Topic classifier:** Haiku subagent (`model: "haiku"`) classifies the topic before agent spawn
+- **Topic classifier:** [seat:persona] Haiku subagent (`model: "haiku"`) classifies the topic before agent spawn
 - **Low-stakes agents:** 5x Sonnet (`model: "sonnet"`) — default pool size
 - **High-stakes agents:** 3x Sonnet + 2x Opus (the two designated anchor personas get
   `model: "opus"` — see "Persona pool" below) — default 5-agent pool
@@ -67,7 +67,7 @@ Before spawning agents, read any files or context they'll need. Every agent must
 
 ### 2b. Classify Topic
 
-Before spawning agents, dispatch a Haiku subagent (`model: "haiku"`) to classify the topic. The classifier prompt:
+[seat:persona] Before spawning agents, dispatch a Haiku subagent (`model: "haiku"`) to classify the topic. The classifier prompt:
 
 ~~~
 Classify this topic for COUNCIL agent routing. Return ONLY a JSON object matching this schema:
@@ -115,7 +115,7 @@ python3 .claude/hooks/lib/schema_validator.py --schema debate_topic_classifier -
 
 ### 3. Spawn N agents in parallel
 
-Launch all N agents in a SINGLE message using multiple Agent tool calls. Each agent gets:
+[seat:persona] Launch all N agents in a SINGLE message using multiple Agent tool calls. Each agent gets:
 - **Identical context** (the problem, relevant file contents, constraints)
 - **Unique framing** selected from the persona pool below
 - **Structured output format** (enforced in the prompt)
@@ -173,7 +173,7 @@ Additionally, output a JSON object on a new line matching the `smac_agent` schem
 Use a float (0.0-1.0) for confidence, not High/Medium/Low.
 ```
 
-**Agent configuration — conditional by topic type:**
+[seat:persona] **Agent configuration — conditional by topic type:**
 
 **Low-stakes pool** (`routing_decision == "low_stakes"`):
 - All N agents use `model: "sonnet"`
@@ -231,7 +231,7 @@ Any non-obvious insights from the "Surprise" field that deserve attention.
 
 ### 5. Present the consensus report
 
-**Synthesis uses Opus where the plan provides it** (`model: "opus"`; else the routing
+[seat:persona] **Synthesis uses Opus where the plan provides it** (`model: "opus"`; else the routing
 profile's substitute). If the synthesis agent fails to return output or returns an error,
 follow the 3-step escalation: re-prompt the same seat, then halt and report to orchestrator
 (there is no higher tier to escalate to).
@@ -316,7 +316,7 @@ follow the 3-step escalation: re-prompt the same seat, then halt and report to o
 When a subagent's output fails schema validation:
 
 1. **Re-prompt same model** — append validation errors to the prompt, ask for corrected output
-2. **Escalate one tier** — if second attempt fails, upgrade model (Haiku→Sonnet, Sonnet→Opus) and re-prompt
+2. [seat:persona] **Escalate one tier** — if second attempt fails, upgrade model (Haiku→Sonnet, Sonnet→Opus) and re-prompt
 3. **Halt** — if third attempt fails, stop and report to orchestrator with full error context
 
 This applies to: topic classifier output, agent structured output, and synthesis output.

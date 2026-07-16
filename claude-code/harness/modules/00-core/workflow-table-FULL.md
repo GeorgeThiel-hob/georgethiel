@@ -7,7 +7,7 @@ auto-promotes the tier when a diff touches a `RISK_PREFIXES` path. Full tables:
 
 Context resets at the spec→execute boundary: the standing brief, plan, and MAP
 dossier already on disk are the full handoff, so implement starts a fresh
-session instead of carrying the spec/MAP conversation forward. Per-task
+session instead of carrying the spec/MAP conversation forward. [seat:scaled_reviewer] Per-task
 reviewer dispatches during implement scale model tier to diff size — a small,
 mechanical diff routes to a mid-tier model; a subtle or risk-touching diff
 routes to the strongest tier this routing profile affords. The whole-branch
