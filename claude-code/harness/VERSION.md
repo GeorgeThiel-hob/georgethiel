@@ -1,8 +1,12 @@
-**Kit version:** 1.0.0
+**Kit version:** 1.1.0
 
 **Cut:** manual snapshot (internal source commit not published)
 
 Manual re-cut only; the kit is a snapshot and does not auto-sync with the project it was cut from (spec §10).
+
+## Changelog
+
+- 1.1.0 — KIT-SEAT-ENFORCE-01: hook-enforced seat→model routing (installer seat-table.json emission, PreToolUse seat check, SubagentStop delivered-model detection, seat tags across skill text).
 
 ## Cut tooling
 

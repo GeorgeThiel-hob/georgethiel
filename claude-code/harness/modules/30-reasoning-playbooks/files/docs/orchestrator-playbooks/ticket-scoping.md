@@ -4,7 +4,7 @@ Record slots in the STANDING BRIEF under `## Playbook slots (ticket-scoping)` be
 any ticket file or issue. For fix tickets born from a bug investigation, the verification loop
 on the finding runs BEFORE this playbook (standing project rule). Ladder (README) applies.
 
-SLOT:id-collision — Output of the ID-enumeration subagent (history grep + docs listing +
+SLOT:id-collision — Output of the [seat:retrieval] ID-enumeration subagent (history grep + docs listing +
 issue tracker) proving the chosen ID is unused, + the final spot-check
 `git log --all --grep='<ID>'` (a near-collision between a new ID and an existing one has
 previously been caught only by this enumeration step — skipping it risks silently
@@ -63,6 +63,6 @@ a down-link).
 > fill:
 
 SLOT:blast-radius — If this ticket's premise is wrong, what downstream work is wasted or
-corrupted? High blast radius → strongest-seat (ladder #8, pre-ship batch) on the premise
+corrupted? High blast radius → [seat:second_opinion] strongest-seat (ladder #8, pre-ship batch) on the premise
 before creating the ticket.
 > fill:

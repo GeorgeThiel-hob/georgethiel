@@ -74,6 +74,6 @@ deviation converts the result to EXPLORATORY.
 > fill:
 
 SLOT:blast-radius — Who/what consumes this number (a dashboard, a sizing decision, a gate, an
-owner decision) and what breaks if it is wrong. High blast radius → strongest-seat (ladder #8,
+owner decision) and what breaks if it is wrong. High blast radius → [seat:second_opinion] strongest-seat (ladder #8,
 pre-ship batch) before publication.
 > fill:

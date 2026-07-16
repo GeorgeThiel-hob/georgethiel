@@ -10,7 +10,7 @@ plainly.
 
 ## What the second-opinion seat is
 
-"The advisor tool if this environment has one, else a fresh-context subagent
+[seat:second_opinion] "The advisor tool if this environment has one, else a fresh-context subagent
 on the strongest affordable model." An advisor-tool-shaped capability is an
 environment fact, not a platform guarantee: some accounts and sessions have
 it, some don't, and no seat assignment can force it into existence. The

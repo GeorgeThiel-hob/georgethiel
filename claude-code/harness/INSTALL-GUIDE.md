@@ -170,8 +170,20 @@ A few things worth knowing once the kit has done its job:
 
 ---
 
+## 5. After the smoke test passes — your next read
+
+The install is done; day-to-day usage is a different doc. Open **`USAGE-GUIDE.md`**
+(same directory) and keep it next to Claude Code from here on: it explains what
+the harness is and walks a real piece of work through the pipeline step by
+step — what to type, what appears on disk, and the token saving tips that
+matter on a Pro plan.
+
+---
+
 ## See also
 
+- `USAGE-GUIDE.md` — the day-to-day companion: the workflow step by step, tiers
+  explained, token saving tips per step. Your main doc once the install is verified.
 - `START-HERE.md` — the normative 8-step flow this guide sequences; read it for the
   actual rules (module resolution, ADAPT substitutions, CLAUDE.md/`.gitignore`
   assembly, update mode).

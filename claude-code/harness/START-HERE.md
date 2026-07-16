@@ -16,10 +16,12 @@ The kit is a **snapshot**. Its version and cut provenance are recorded in `VERSI
 It does not auto-sync with the project it was cut from; a newer harness means a newer
 kit cut, installed through the update procedure described later in this file.
 
-> **Companion doc:** `INSTALL-GUIDE.md` (same directory) is a short, sequential
+> **Companion docs:** `INSTALL-GUIDE.md` (same directory) is a short, sequential
 > "what to run and when" reference for the member — read this file for the full
 > normative flow; hand them `INSTALL-GUIDE.md` for the parts they act on directly,
-> especially the post-restart step (7 → 8).
+> especially the post-restart step (7 → 8). `USAGE-GUIDE.md` (same directory) is
+> the member's **post-install** day-to-day companion — the installing session does
+> not read it; point the member at it in the install report, after the smoke test.
 
 ---
 
@@ -393,6 +395,25 @@ about what can and cannot be checked:
 - **Never block the install on an availability doubt.** Availability cannot be verified
   from inside a session, so uncertainty about it is never a reason to halt. Install per
   the routing table and note the substitution caveat in the report.
+- **Seat routing enforcement validates the *requested* model, not the delivered one.**
+  The seat-routing check (installed with the tier-system module) runs at PreToolUse and
+  compares the model a dispatch *asks for* against the seat it declares — before the
+  dispatch runs. It adds no pre-dispatch availability detection: the "no enumeration
+  surface" limit above still holds, so a request the platform silently substitutes is
+  invisible at request time.
+- **On FULL, the *delivered* model is caught after the fact — log-only, best-effort.**
+  The FULL-tier SubagentStop hook reads the model a finished subagent was actually
+  *served* (from that subagent's own transcript) and logs a mismatch when it falls
+  outside the seat's allow-list. This is post-hoc — the tokens are already spent — and
+  it never blocks and never rolls back; it only records. It is also best-effort: it
+  compares only when it can recover which seat the dispatch requested from the tag, and
+  silently skips when it cannot. An observability aid, not a guarantee.
+- **A model id the check cannot resolve is disclosed, never passed silently.** The
+  delivered-model read depends on a recognizable serving-model id in the transcript.
+  When an id is present but maps to no known seat alias, the check logs it as
+  *unresolved* and warns rather than treating it as a match. If a future Claude Code
+  version records model ids differently, the failure mode is disclosure (WARN), not
+  false assurance.
 
 ---
 
@@ -463,6 +484,35 @@ Install with these limits in view, and pass them to the member:
   kit; treat what it installs as a starting point, not a validated result.
 - **The kit is a snapshot.** Its `VERSION.md` records the commit it was cut from. It does
   **not** track the source project; a newer harness means a newer kit cut.
+- **Two dispatch channels are out of the seat check's vision.** The seat-routing check
+  only sees dispatches that flow through the tool layer it hooks. It does **not** see
+  DEBATE's debaters, which run as CLI `subprocess.run` child processes, and it does not
+  see the second-opinion seat when that seat is filled by the **advisor tool** (an
+  out-of-band call the hook never observes). The advisor's *subagent-fallback* path, by
+  contrast, **is** in vision and carries the seat tag like any other dispatch — only the
+  direct advisor-tool call is unseen.
+- **The check enforces the seat you *declare*, not the seat you *should have* declared.**
+  A dispatch's seat tag is self-declared, and the check validates the model against
+  *that* tag. Declaring a lighter seat than the work warrants — the `scaled_reviewer`
+  downgrade-dodge, tagging a review dispatch as a cheaper seat to dodge the stronger
+  model — passes the check, because the check has no independent notion of which seat the
+  work *deserved*. It polices the declared seat's model, nothing more.
+- **Fixed-model seats cannot be degraded without switching to warn mode.** On MAX5 and
+  MAX20 the `second_opinion` and `audit_reviewer` seats are pinned to opus — a
+  degradation *floor*. Elsewhere the kit's own text sanctions degrade-capable ranges
+  ("strongest affordable model"; module 30's ladder-degradation rule), so a member who
+  genuinely needs one of those two seats to run below its floor must set
+  `SEAT_ROUTING_MODE=warn`; the check otherwise blocks the below-floor model.
+- **Tag position is load-bearing, and echoed tags are validated as the dispatch's own.**
+  The check reads the seat tag from the leading portion of a dispatch's prompt (the first
+  ~500 characters; a `description` tag counts at any position). Two consequences: (1) a
+  valid tag placed *after* that window is not treated as absent — it blocks with a
+  late-tag message, so keep the tag at the lead; (2) tag-bearing text quoted or echoed
+  into the leading window is validated as *this* dispatch's own tag, so never prepend
+  quoted tag-bearing text to a prompt. A nested dispatch whose own body is under ~500
+  characters cannot carry a foreign operative tag without tripping an ambiguity block
+  (two seat tags in the window) — pad the body past the window, or use
+  `SEAT_ROUTING_MODE=warn`.
 
 ---
 

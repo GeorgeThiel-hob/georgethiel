@@ -40,7 +40,7 @@ axis:
   notation, `framings` (`> fill (1)..(3):`), is a structured multi-part fill by design: it is
   the orchestrator's own reasoning, not retrieval — an off-thread-retrieval rule does not
   apply to it. `framing-verdict` and `blast-radius` are ONE-LINE slots (verdict + pointer)
-  even though their content is judgment. Batch the evidence-gathering the same way you would
+  even though their content is judgment. [seat:retrieval] Batch the evidence-gathering the same way you would
   batch plan content: ONE subagent per playbook phase returning ALL of that phase's filled
   slot lines (never per-slot dispatches; a trivial single lookup the orchestrator needs
   immediately stays inline).
@@ -87,7 +87,7 @@ showing what a domain-specific gate playbook looks like for a project that has o
 
 ## The escalation ladder (applies in every playbook, checked continuously)
 
-Conditions are mechanical; the route is not negotiable in-session. "strongest-seat" = a
+[seat:second_opinion] Conditions are mechanical; the route is not negotiable in-session. "strongest-seat" = a
 fresh-context subagent on the strongest available reviewing model, with repo (+ data access
 where relevant) read access — treat the packet you send it as claims for it to refute, never
 conclusions to confirm (a strong model fed a wrong premise will tend to agree with the wrong
@@ -109,7 +109,7 @@ strongest-seat cost per session explicitly.
 ```
 #  Condition (mechanical)                                    Route
 -  --------------------------------------------------------  ----------------------
-1  Chosen framing has NO listed observation distinguishing    strongest-seat BEFORE
+1  Chosen framing has NO listed observation distinguishing    strongest-seat BEFORE [seat:second_opinion]
    it from the runner-up framing                              building on it
 2  A load-bearing claim's evidence is a prior dossier,         Re-derive from primary
    report, summary, or your own memory of the session         source or label Unknown
@@ -126,7 +126,7 @@ strongest-seat cost per session explicitly.
    unverified                                                   verify now or route #1
 7  A number you are about to publish changed >20% since a       Re-run its derivation
    prior artifact stated it                                     before publishing
-8  A blast-radius slot names high-cost / multi-item             strongest-seat (pre-ship
+8  A blast-radius slot names high-cost / multi-item             strongest-seat (pre-ship [seat:second_opinion]
    downstream impact and the item is still unverified           batch)
 ```
 
@@ -138,7 +138,7 @@ block a ladder route on an unavailable budget knob.
 
 ## Degradation rule
 
-These files are the durable layer. If the strongest reviewing model becomes unavailable:
+[seat:second_opinion] These files are the durable layer. If the strongest reviewing model becomes unavailable:
 ladder routes to "strongest-seat" degrade to the next-strongest fresh-context model;
 everything else here keeps working unchanged, with one named exception — if a playbook's
 REASONING content is found wrong while the strongest model is unavailable, the provenance

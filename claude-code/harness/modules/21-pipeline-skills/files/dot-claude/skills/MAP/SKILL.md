@@ -128,7 +128,7 @@ a separate investigation; do not silently drop it and do not chase it here.
 ## Step 0 — Scope & intended-behavior overview (before any adversarial round)
 
 You cannot tell a rotten link from a healthy one without knowing what the code is
-*supposed* to do. Dispatch the Audit reviewer seat (a fresh-context subagent on
+*supposed* to do. [seat:audit_reviewer] Dispatch the Audit reviewer seat (a fresh-context subagent on
 that seat's model, per the active routing profile — MAP reuses the same
 strongest-available adversarial code-reading seat that REVIEW uses; see
 `profiles/routing-*.md`) to produce:
@@ -264,14 +264,14 @@ digraph map {
 2. **Dispatch the adversarial verifier(s).** Use the Audit reviewer seat for
    ALL adversarial verifiers and code-reading roles (per the active routing
    profile — this is the strongest available seat for adversarial
-   code-reading, same seat REVIEW uses), the `general-purpose` agent for
-   SSH/DB/log forensics if applicable to this project, Retrieval-seat agents
+   code-reading, same seat REVIEW uses), [seat:scaled_reviewer] the `general-purpose` agent for
+   SSH/DB/log forensics if applicable to this project, [seat:retrieval] Retrieval-seat agents
    for trivial git/DB one-liners only. For Round 1, hand the verifier the
    COMPLETE surface list (every file, interface, and guard the change
    touches) plus Step 0's seed map; for Round 2 (fresh-eyes) or the reopen
    round, hand the verifier the current map and the specific node(s) to
    re-examine. Instruct EXPLICITLY:
-   "[MAP-VERIFIER] REFUTE these node(s), do not confirm. You receive the
+   "[MAP-VERIFIER] [seat:audit_reviewer] REFUTE these node(s), do not confirm. You receive the
    COMPLETE surface list — enumerate and refute ALL of it this round. Every
    behavioral claim needs a file:line/query + confidence label. Trace *why*
    each node is rotten/true — name its child causes/effects as new candidate
@@ -311,7 +311,7 @@ digraph map {
    `python3 .claude/hooks/check_gate_evidence.py --write-evidence audit`
    (REVIEW is the canonical `audit` writer on a normal ticket's clean Step-6
    report; MAP writes `audit` when MAP is the convergence engine. Both
-   idempotent — this project's ship gate accepts either). Then dispatch the
+   idempotent — this project's ship gate accepts either). [seat:second_opinion] Then dispatch the
    second-opinion seat. **If it surfaces a new P0/P1 → spend the reopen if
    unspent, else escalate** (back to step 3). Budget: ≤1 mid-loop check if
    genuinely stuck on oscillation, +1 post-loop synthesis.

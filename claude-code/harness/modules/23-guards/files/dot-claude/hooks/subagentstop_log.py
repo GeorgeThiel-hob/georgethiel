@@ -7,6 +7,15 @@ Appends JSON records to ~/.claude/logs/subagent-failures.log for post-session re
 Also scans Agent tool_response content for behavioral claims missing confidence
 labels (Verified/Estimated/Assumed/Unknown) and appends misses to
 ~/.claude/logs/confidence-label-misses.log (AC-6, best-effort, non-blocking).
+
+Additionally performs read-only seat-mismatch detection (`check_delivered_model`,
+AC-10): compares the model a finished subagent was actually DELIVERED against the
+seat its dispatch REQUESTED, logging a record + stderr warning on a mismatch. This
+is detect-and-log ONLY — SubagentStop has no block channel, so it never blocks or
+rolls back (still always exits 0). Best-effort: the delivered model is read
+reliably, but the requested seat is inferred from the dispatch's `[seat:...]` tag
+in the transcript's first user message and the check silently no-ops (fails SAFE)
+when that tag cannot be recovered.
 """
 
 import hashlib
@@ -129,6 +138,124 @@ def maybe_log_label_misses(stdin_dict: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Delivered-model seat-mismatch detection (AC-10) — detect-and-log ONLY
+# ---------------------------------------------------------------------------
+#
+# Source-of-truth nuance (Verified — Task-1 payload captures,
+# docs/superpowers/briefs/KIT-SEAT-ENFORCE-01-payload-captures.md): in THIS
+# Claude Code version subagent assistant entries are NOT inlined into the
+# parent `transcript_path` as isSidechain rows (0 of 2568 there). The delivered
+# model id lives ONLY in the subagent's own `agent_transcript_path`
+# (`message.model` on its assistant entries), which also carries the dispatch
+# prompt as its first user message (where the [seat:...] tag lives). So this
+# check reads `agent_transcript_path`, NOT `transcript_path`+isSidechain — the
+# latter would scan the wrong transcript and silently detect nothing.
+
+
+def _flatten_text(content) -> str:
+    """Return the text of a transcript message's content (str or block list)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts)
+    return ""
+
+
+def _log_seat_mismatch(seat, allowed, delivered_model, delivered_alias) -> None:
+    """Append a structured seat-mismatch record to the subagent log."""
+    record = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "branch": _get_branch(),
+        "event": "seat-mismatch",
+        "seat": seat,
+        "allowed": list(allowed),
+        "delivered_model": delivered_model,
+        "delivered_alias": delivered_alias,
+    }
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    with _LOG_PATH.open("a") as fh:
+        fh.write(json.dumps(record) + "\n")
+
+
+def check_delivered_model(stdin_dict: dict) -> None:
+    """Detect-and-log delivered-model substitution (AC-10). NEVER blocks;
+    always returns None. SubagentStop has no block channel, so this is
+    observe-only: it reads the subagent's OWN transcript
+    (`agent_transcript_path`), extracts the dispatch's seat tag from the first
+    user message, resolves each assistant message's serving-model id to an
+    alias (skipping the "<synthetic>" sentinel), and logs a seat-mismatch
+    record + stderr warning when a delivered alias falls outside the seat's
+    allow-list. Any missing field / unreadable file / absent model -> silent
+    no-op (fail-open). SEAT_ROUTING_MODE does not change this — no block
+    channel at SubagentStop."""
+    try:
+        from lib.seat_checks import (  # noqa: E402
+            _SEAT_TAG_RE,
+            _load_seat_table,
+            _model_alias,
+            _normalize_seat,
+        )
+    except Exception:  # noqa: BLE001 — module 20 absent, nothing to check
+        return
+    try:
+        # Read the subagent's own transcript (NOT the parent transcript_path):
+        # this version stores subagent assistant entries only here (Task-1).
+        transcript_path = stdin_dict.get("agent_transcript_path", "")
+        if not transcript_path:
+            return  # no per-agent transcript pointer -> no check (fail-open)
+        from lib.transcript_utils import load_entries  # noqa: E402
+
+        entries = load_entries(transcript_path)
+        if not entries:
+            return
+
+        seat = None
+        for entry in entries:
+            msg = entry.get("message") or {}
+            if entry.get("type") == "user" or msg.get("role") == "user":
+                m = _SEAT_TAG_RE.search(_flatten_text(msg.get("content")))
+                if m:
+                    seat = _normalize_seat(m.group(1))
+                break
+        if seat is None:
+            return  # untagged transcript — PreToolUse owns tagging
+
+        seats, err = _load_seat_table()
+        if err is not None or seat not in seats:
+            return
+        allowed = seats[seat]
+
+        for entry in entries:
+            model = (entry.get("message") or {}).get("model")
+            if not model or model == "<synthetic>":
+                continue
+            alias = _model_alias(str(model))
+            if alias is None or alias == "<ambiguous>":
+                _log_seat_mismatch(seat, allowed, str(model), "unresolved")
+                print(
+                    f"SEAT ROUTING: subagent for seat {seat} served "
+                    f"unresolvable model {model!r} (allowed {allowed}).",
+                    file=sys.stderr,
+                )
+                continue
+            if alias not in allowed:
+                _log_seat_mismatch(seat, allowed, str(model), alias)
+                print(
+                    f"SEAT ROUTING: subagent for seat {seat} was served "
+                    f"{alias} (from {model!r}); allowed {allowed}.",
+                    file=sys.stderr,
+                )
+    except Exception:  # noqa: BLE001 — never wedge the SubagentStop event
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -151,6 +278,7 @@ def main(stdin: IO[str] | None = None) -> None:
         stdin_dict = json.load(source)
         log_subagent_result(stdin_dict)
         maybe_log_label_misses(stdin_dict)
+        check_delivered_model(stdin_dict)
     except Exception as exc:  # noqa: BLE001
         # Fail open — log error but do not wedge session
         error_log = Path.home() / ".claude" / "logs" / "hook-errors.log"

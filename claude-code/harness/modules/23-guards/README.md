@@ -24,8 +24,12 @@ there is no project-specific value for an adopter to fill in.
   (see `docs/harness/23-guards.md`'s WARN-first-before-BLOCK section for why
   this one check is the exception).
 - `files/dot-claude/hooks/subagentstop_log.py` — the SubagentStop hook. Logs
-  subagent failures (best-effort) and runs the confidence-label scan
-  (`maybe_log_label_misses`) — log-only, non-blocking.
+  subagent failures (best-effort), runs the confidence-label scan
+  (`maybe_log_label_misses`), and now **also** performs read-only
+  **seat-mismatch detection** (`check_delivered_model`) — comparing the model a
+  finished subagent was actually *delivered* against the seat its dispatch
+  *requested*. All three are **log-only, non-blocking; the hook always exits 0.**
+  See "Delivered-model seat-mismatch detection" below for the honesty caveat.
 - `files/dot-claude/hooks/lib/claim_detector.py` — shared claim-detection
   primitives (`Finding`, `scan_for_uncited_claims`, `scan_for_quantifier_claims`,
   `scan_for_unlabeled_claims`). Imported by both hooks above. stdlib-only
@@ -70,7 +74,33 @@ these two hooks crash at load instead of degrading gracefully. This is the
 one place in the whole kit where a missing dependency is a hard failure, not
 a guarded no-op — see `docs/harness/23-guards.md` for the full closure table.
 
-## Kit-variant deltas (AC-6)
+## Delivered-model seat-mismatch detection — read-only, best-effort
+
+`subagentstop_log.py`'s `check_delivered_model` closes part of the seat-routing
+gap the PreToolUse check (module 20) cannot reach: PreToolUse validates the model
+a dispatch *requests*, but has no way to see the model the platform actually
+*served*. At SubagentStop, the finished subagent's own transcript records the
+delivered model, so this check reads it and logs a record + stderr warning when
+the delivered model falls outside the seat's allow-list. Three honesty points
+adopters must hear:
+
+- **Detect-and-log ONLY — it never blocks or rolls back.** SubagentStop has no
+  block channel, and by the time it fires the tokens are already spent. The check
+  is purely observe-only: it always returns `None` and the hook always exits 0.
+  `SEAT_ROUTING_MODE` does not change this — there is nothing to downgrade,
+  because there is no block to begin with.
+- **Best-effort correlation — it can silently skip.** The delivered model is read
+  reliably from the transcript's `message.model`. The *requested* seat, however,
+  is inferred by reading the `[seat:...]` tag from the transcript's **first user
+  message**. When that tag is absent or unrecoverable, the check **silently
+  no-ops** (fails SAFE — it never invents a false mismatch). So delivered-vs-
+  requested detection is a disclosure/observability aid, **never a guarantee**;
+  treat a quiet log as "nothing was recovered to compare," not as "everything
+  matched."
+- **A model id it cannot resolve is disclosed, not passed.** A delivered model
+  that maps to no known alias (or is ambiguous) is logged as `unresolved` and
+  warned on, rather than assumed to match. If module 20 is absent the import
+  fails and the check is a no-op — nothing to compare against.
 
 **AC-6 delta name:** "the module-23 import rewrite (`.pm_report_checks` →
 `.post_edit` at `claim_binding_guard.py:32`, `circularity_guard.py:23`,
@@ -154,7 +184,11 @@ and the extracted `post_edit` module are stdlib-only. `reexec_guard` is
 - `stop_citation_guard.py` imports `lib.claim_detector` (`Finding`,
   `scan_for_quantifier_claims`, `scan_for_uncited_claims`) and
   `lib.transcript_utils` (`load_entries`).
-- `subagentstop_log.py` imports `lib.claim_detector` (`scan_for_unlabeled_claims`).
+- `subagentstop_log.py` imports `lib.claim_detector` (`scan_for_unlabeled_claims`)
+  and, for the delivered-model check, `lib.transcript_utils` (`load_entries`) plus
+  **module 20's** `lib.seat_checks` (`_SEAT_TAG_RE`, `_load_seat_table`,
+  `_model_alias`, `_normalize_seat`) — both imports are guarded, so the check is a
+  no-op when module 20 is absent rather than a load-time crash.
 - `lib/claim_binding_guard.py` imports `lib/__init__` (`HookResult`),
   `.claim_detector` (`CITATION_PATTERN`), `.post_edit` (`_post_edit_content`),
   and `.reexec_guard` (`_fenced_line_flags`, `_iter_directives`).
