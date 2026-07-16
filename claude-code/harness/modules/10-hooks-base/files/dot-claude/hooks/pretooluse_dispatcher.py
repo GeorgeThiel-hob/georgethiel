@@ -2,7 +2,8 @@
 pretooluse_dispatcher.py — PreToolUse hook entry point.
 
 Reads JSON from stdin, routes to check functions by tool_name,
-writes JSON to stdout: {"decision": "allow"} or {"decision": "block", "message": "..."}.
+writes JSON to stdout ONLY on block: {"decision": "block", "message": "..."} — an
+allowed call emits nothing (empty stdout + exit 0 is the allow signal).
 
 Safety: all checks are wrapped in try/except — a broken check fails open (allow)
 and logs the exception to ~/.claude/logs/hook-errors.log.
@@ -234,10 +235,15 @@ def main() -> None:
     except Exception:  # noqa: BLE001
         response = {"decision": "allow"}
 
-    try:
-        print(json.dumps(response))
-    except Exception:  # noqa: BLE001
-        print('{"decision": "allow"}')
+    # FIX-HOOK-ALLOW-NOISE-01 (kit port): emit stdout ONLY on block. Allow →
+    # empty stdout + exit 0 (Claude Code: "no output means the hook has no
+    # decision to report"). Emission failure → emit nothing (fail open),
+    # matching the module contract "fails open at every layer".
+    if response.get("decision") == "block":
+        try:
+            print(json.dumps(response))
+        except Exception:  # noqa: BLE001
+            pass
 
     sys.exit(0)
 

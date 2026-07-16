@@ -1,4 +1,4 @@
-**Kit version:** 1.1.0
+**Kit version:** 1.1.1
 
 **Cut:** manual snapshot (internal source commit not published)
 
@@ -6,6 +6,13 @@ Manual re-cut only; the kit is a snapshot and does not auto-sync with the projec
 
 ## Changelog
 
+- 1.1.1 — FIX-KIT-PAYLOAD-TOUCHUPS-01: hooks emit stdout only on block (fixes
+  "Hook JSON output validation failed" noise on every allowed call in current
+  Claude Code — pretooluse_dispatcher.py + pii_pattern_guard.py); general
+  seat-dispatch rule added to the assembled CLAUDE.md (module 20 block: every
+  dispatch = [seat:<name>] + explicit model; fix-don't-avoid); GIT-skill
+  `-D`-after-squash note (both variants); `__pycache__/` in the 00-core
+  gitignore block.
 - 1.1.0 — KIT-SEAT-ENFORCE-01: hook-enforced seat→model routing (installer seat-table.json emission, PreToolUse seat check, SubagentStop delivered-model detection, seat tags across skill text).
 
 ## Cut tooling
