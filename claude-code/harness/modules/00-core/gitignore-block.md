@@ -8,3 +8,6 @@ docs/superpowers/briefs/
 # nudge detects that shape from the COMMITTED git diff, so its dossiers must stay
 # tracked or the nudge silently never fires. Ignore it only if you also retarget that
 # detection to the working tree.
+
+# Python bytecode caches — never track.
+__pycache__/

@@ -177,10 +177,15 @@ def main() -> None:
     except Exception:  # noqa: BLE001
         response = {"decision": "allow"}
 
-    try:
-        print(json.dumps(response))
-    except Exception:  # noqa: BLE001
-        print('{"decision": "allow"}')
+    # FIX-KIT-PAYLOAD-TOUCHUPS-01 (same class as FIX-HOOK-ALLOW-NOISE-01): emit
+    # stdout ONLY on block — an allowed call emits nothing. The block branch is
+    # unreachable today (check_pii_patterns always allows) but stays symmetric
+    # with pretooluse_dispatcher.py's shape by convention.
+    if response.get("decision") == "block":
+        try:
+            print(json.dumps(response))
+        except Exception:  # noqa: BLE001
+            pass
 
     sys.exit(0)
 

@@ -183,6 +183,10 @@ Clean up the local feature branch if it still exists:
 git branch -d <feature-branch>  # safe delete (only if merged)
 ```
 
+> After a **squash** merge, `git branch -d` refuses — the squash commit rewrites the
+> changes onto the trunk, so the branch tip is not an ancestor. Verify the squash
+> commit landed (`git log --oneline -1` on the trunk), then delete with `git branch -D`.
+
 ### 5. Report
 
 Output, if the user confirmed the merge:
