@@ -1,4 +1,4 @@
-**Kit version:** 1.1.1
+**Kit version:** 1.1.2
 
 **Cut:** manual snapshot (internal source commit not published)
 
@@ -6,6 +6,12 @@ Manual re-cut only; the kit is a snapshot and does not auto-sync with the projec
 
 ## Changelog
 
+- 1.1.2 — FIX-KIT-INSTALLGUIDE-SEAT-NOTE-01: INSTALL-GUIDE.md §3b smoke-test now
+  documents the MAX5-profile seat-routing blocks — after writing the standing
+  brief, the re-dispatch is correctly blocked twice more (missing `model`, then
+  missing `[seat:...]`) before proceeding. An install session hit these
+  unexpectedly and read them as failures; the note makes clear they are correct
+  MAX5 behavior. Manifest hash refreshed for the edited doc.
 - 1.1.1 — FIX-KIT-PAYLOAD-TOUCHUPS-01: hooks emit stdout only on block (fixes
   "Hook JSON output validation failed" noise on every allowed call in current
   Claude Code — pretooluse_dispatcher.py + pii_pattern_guard.py); general

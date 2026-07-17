@@ -125,12 +125,24 @@ actually *does* something.
    the installed `GIT` skill variant. On the github routing variant, this ends with a
    push to your configured remote.
 
+   > **Seat-routing note (MAX5 profile only).** If you installed module
+   > `22-second-opinion-seat` with the **MAX5** routing profile, the re-dispatch in
+   > step 5 is **still blocked twice more** before it proceeds — once for a missing
+   > `model` param, once for a missing `[seat:...]` tag in the dispatch prompt/
+   > description. That is correct behavior, not a second failure: under MAX5 every
+   > subagent dispatch must declare a seat and a `model` matching that seat's
+   > `seat-table.json` entry. The dispatch proceeds only once tagged (e.g.
+   > `[seat:workers]` with `model: sonnet`). Other routing profiles don't enforce
+   > this and won't show these two extra blocks.
+
 **FULL — a T1-shaped change through the shape of the full pipeline.**
 1. On a `feature/*` branch (create one as in STANDARD step 1 — the gate does not fire on
    `main`), confirm the `require_standing_brief` block fires on a brief-less dispatch
    (module `20-tier-system` is installed at FULL too, same hook).
 2. Then run a spec stub → implement → one `REVIEW` round → ship via the installed
-   `GIT` skill variant.
+   `GIT` skill variant. (If you installed the **MAX5** routing profile, every subagent
+   dispatch in this chain must carry a `[seat:...]` tag and a matching `model` — see the
+   seat-routing note under STANDARD step 5; the extra blocks are correct, not failures.)
 3. **PASS** = each stage actually engages — the `REVIEW` skill loads and runs its
    first step, and `GIT`'s pre-flight gate (module `22-second-opinion-seat`) runs its
    phase-evidence check. (For a T1-shaped change with no spec/plan evidence recorded,
